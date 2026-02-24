@@ -1,5 +1,10 @@
 import { build } from 'esbuild'
 
+// Optional native addons that may not be compiled/installed in all environments.
+// We stub them out so the bundle starts cleanly; webtorrent and ws fall back
+// gracefully when these enhancements are absent.
+const STUB_MODULES = ['bufferutil', 'utf-8-validate', 'utp-native', 'node-datachannel']
+
 await build({
   entryPoints: ['src/index.ts'],
   bundle: true,
@@ -8,14 +13,32 @@ await build({
   format: 'esm',
   outfile: 'dist/index.js',
   external: [
-    // Native addons — must stay external
-    'bufferutil',
-    'utf-8-validate',
-    'utp-native',
-    'node-datachannel',
-    // Prisma engine binaries
     '@prisma/client',
     '.prisma/client',
+  ],
+  plugins: [
+    {
+      name: 'stub-optional-natives',
+      setup(build) {
+        for (const mod of STUB_MODULES) {
+          const filter = new RegExp(`^${mod}$`)
+          build.onResolve({ filter }, () => ({ path: mod, namespace: 'stub' }))
+        }
+        build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+          // Export every known named export as null so esbuild's static
+          // analysis doesn't complain about missing bindings.
+          contents: [
+            'export default null;',
+            // node-datachannel exports used by webrtc-polyfill
+            'export const PeerConnection = null;',
+            'export const RtcpReceivingSession = null;',
+            'export const Video = null;',
+            'export const Audio = null;',
+          ].join('\n'),
+          loader: 'js',
+        }))
+      },
+    },
   ],
   banner: {
     // Use unique aliases so these imports never clash with bindings
