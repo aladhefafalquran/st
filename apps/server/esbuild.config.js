@@ -18,14 +18,9 @@ await build({
     '.prisma/client',
   ],
   banner: {
-    js: `
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-`.trim(),
+    // Use unique aliases so these imports never clash with bindings
+    // that webtorrent (or its deps) introduce in the same bundle file.
+    js: `import{createRequire as __cr}from"node:module";import{fileURLToPath as __futp}from"node:url";import{dirname as __dn}from"node:path";const require=__cr(import.meta.url);const __filename=__futp(import.meta.url);const __dirname=__dn(__filename);`,
   },
 })
 
