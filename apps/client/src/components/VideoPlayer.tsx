@@ -234,15 +234,16 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     const onDuration = () => setDuration(v.duration)
     const onVolume = () => { setVolume(v.volume); setMuted(v.muted) }
     const onFs = () => setFullscreen(!!document.fullscreenElement)
-    const onCanPlay = () => setVideoCanPlay(true)
+    // Only 'playing' guarantees the first frame is actually painted —
+    // 'canplay' fires too early (browser has data but hasn't decoded the frame yet).
+    const onPlaying = () => setVideoCanPlay(true)
 
     v.addEventListener('play', onPlay)
     v.addEventListener('pause', onPause)
     v.addEventListener('timeupdate', onTime)
     v.addEventListener('durationchange', onDuration)
     v.addEventListener('volumechange', onVolume)
-    v.addEventListener('canplay', onCanPlay)
-    v.addEventListener('playing', onCanPlay)
+    v.addEventListener('playing', onPlaying)
     document.addEventListener('fullscreenchange', onFs)
     return () => {
       v.removeEventListener('play', onPlay)
@@ -250,8 +251,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       v.removeEventListener('timeupdate', onTime)
       v.removeEventListener('durationchange', onDuration)
       v.removeEventListener('volumechange', onVolume)
-      v.removeEventListener('canplay', onCanPlay)
-      v.removeEventListener('playing', onCanPlay)
+      v.removeEventListener('playing', onPlaying)
       document.removeEventListener('fullscreenchange', onFs)
     }
   }, [streamUrl])
@@ -374,18 +374,23 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     return `Buffering ${preloadPct}%  ·  ${formatSpeed(downloadSpeed)}  ·  ${peers} peer${peers !== 1 ? 's' : ''}`
   }
 
-  // Show loading overlay over video while it hasn't fired canplay yet
-  const showLoadingOverlay = !streamUrl || !videoCanPlay
+  // Overlay fades out once the video fires 'playing' (first frame painted).
+  // Using opacity+pointer-events instead of conditional render keeps the
+  // poster image visible during the browser's decoder warm-up period.
+  const overlayVisible = !streamUrl || !videoCanPlay
 
   return (
     <div ref={containerRef} className="relative w-full bg-black">
       <div className="relative w-full aspect-video">
 
-        {/* Video element — always mounted once streamUrl is set, never removed on error */}
+        {/* Video element — mounted once streamUrl is ready, never removed on transient errors.
+             poster= shows the backdrop while the browser's codec initialises,
+             eliminating the black flash between overlay fade-out and first frame. */}
         {streamUrl && (
           <video
             ref={videoRef}
             src={streamUrl}
+            poster={posterSrc ?? undefined}
             className="w-full h-full"
             autoPlay
             playsInline
@@ -393,10 +398,8 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
               const count = videoErrorCount + 1
               setVideoErrorCount(count)
               if (count >= 2) {
-                // Two consecutive errors on same source — try next
                 tryNextStream()
               } else {
-                // First error: reload the same URL (might be a transient hiccup)
                 const v = videoRef.current
                 if (v) { v.load(); v.play().catch(() => {}) }
               }
@@ -404,12 +407,15 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
           />
         )}
 
-        {/* Loading / error overlay */}
-        {showLoadingOverlay && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10">
-            {posterSrc && (
-              <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
-            )}
+        {/* Loading overlay — always in DOM, fades out on 'playing' via opacity.
+             This prevents a black flash: the poster is visible through the overlay
+             during the 600ms fade, by which time the video is already rendering. */}
+        <div
+          className={`absolute inset-0 flex flex-col items-center justify-center bg-black z-10 transition-opacity duration-700 ${overlayVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        >
+          {posterSrc && (
+            <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover opacity-25" />
+          )}
             <div className="relative flex flex-col items-center gap-4 px-6 text-center max-w-sm w-full">
               {streamError ? (
                 <>
@@ -463,7 +469,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
               )}
             </div>
           </div>
-        )}
 
         {/* Subtitle overlay */}
         {streamUrl && videoCanPlay && activeCue && (
