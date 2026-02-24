@@ -104,6 +104,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
   // Subtitle state
   const [subsOpen, setSubsOpen] = useState(false)
+  const [subView, setSubView] = useState<'lang' | 'tracks'>('lang') // two-level menu
   const [subLang, setSubLang] = useState('')
   const [tracks, setTracks] = useState<SubtitleTrack[]>([])
   const [activeTrack, setActiveTrack] = useState<SubtitleTrack | null>(null)
@@ -546,34 +547,93 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                     )}
                   </div>
 
-                  {/* Subtitles */}
+                  {/* Subtitles — two-level menu: language → track list */}
                   <div className="relative">
                     <button
-                      onClick={(e) => { e.stopPropagation(); setSubsOpen((v) => !v) }}
+                      onClick={(e) => { e.stopPropagation(); setSubsOpen((v) => !v); setSubView('lang') }}
                       className={`text-xs px-2 py-1 rounded cursor-pointer ${activeTrack ? 'text-[var(--st-accent)]' : 'text-white bg-white/10 hover:bg-white/20'}`}
                     >
                       CC
                     </button>
                     {subsOpen && (
-                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg py-1 z-30 w-48 max-h-60 overflow-y-auto shadow-xl">
-                        <button onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(null); setSubLang(''); setSubsOpen(false) }}
-                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${!activeTrack ? 'text-[var(--st-accent)]' : 'text-white/60'}`}>
-                          Off
-                        </button>
-                        {LANGUAGES.map((lang) => (
-                          <button key={lang.code}
-                            onClick={(e) => { e.stopPropagation(); fetchSubtitles(lang.code); setSubsOpen(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${subLang === lang.code ? 'text-[var(--st-accent)]' : 'text-white'}`}>
-                            {subtitleLoading && subLang === lang.code ? 'Loading…' : lang.label}
-                          </button>
-                        ))}
-                        {tracks.map((t) => (
-                          <button key={t.fileId}
-                            onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubsOpen(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}>
-                            {t.releaseName.slice(0, 28) || t.languageName}
-                          </button>
-                        ))}
+                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg z-30 w-52 max-h-72 overflow-y-auto shadow-xl">
+
+                        {/* ── Level 1: Language picker ── */}
+                        {subView === 'lang' && (
+                          <>
+                            <div className="px-3 py-1.5 text-[10px] text-white/40 uppercase tracking-wider border-b border-[var(--st-border)]">
+                              Subtitle language
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(null); setSubLang(''); setSubsOpen(false) }}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer ${!activeTrack ? 'text-[var(--st-accent)]' : 'text-white/60'}`}
+                            >
+                              Off
+                            </button>
+                            {LANGUAGES.map((lang) => (
+                              <button
+                                key={lang.code}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSubView('tracks')
+                                  fetchSubtitles(lang.code) // fetches tracks, does NOT close menu
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer flex items-center justify-between ${subLang === lang.code ? 'text-[var(--st-accent)]' : 'text-white'}`}
+                              >
+                                <span>{lang.label}</span>
+                                <span className="text-white/30">›</span>
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        {/* ── Level 2: Track list for selected language ── */}
+                        {subView === 'tracks' && (
+                          <>
+                            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--st-border)]">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSubView('lang') }}
+                                className="text-white/50 hover:text-white text-xs cursor-pointer px-1"
+                              >
+                                ←
+                              </button>
+                              <span className="text-[10px] text-white/50 uppercase tracking-wider">
+                                {LANGUAGES.find((l) => l.code === subLang)?.label ?? subLang}
+                              </span>
+                            </div>
+
+                            {subtitleLoading && (
+                              <div className="px-3 py-3 text-xs text-white/50 flex items-center gap-2">
+                                <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
+                                Searching…
+                              </div>
+                            )}
+
+                            {!subtitleLoading && tracks.length === 0 && (
+                              <div className="px-3 py-3 text-xs text-white/40">No subtitles found</div>
+                            )}
+
+                            {!subtitleLoading && tracks.length > 0 && (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(null); setSubsOpen(false) }}
+                                  className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer ${!activeTrack ? 'text-[var(--st-accent)]' : 'text-white/60'}`}
+                                >
+                                  Off
+                                </button>
+                                {tracks.map((t) => (
+                                  <button
+                                    key={t.fileId}
+                                    onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubsOpen(false); setSubView('lang') }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer leading-tight ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}
+                                  >
+                                    {t.releaseName.slice(0, 34) || t.languageName}
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
