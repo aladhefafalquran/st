@@ -4,8 +4,11 @@ import { useAuthStore } from '../store/authStore'
 import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shared'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
-// Max seconds to wait for preload before giving up and trying next stream
-const PRELOAD_TIMEOUT = 120
+// Max seconds before auto-advancing to next source
+const PRELOAD_TIMEOUT = 30
+// If speed stays below this (bytes/s) for SLOW_TIMEOUT seconds, skip source
+const SLOW_SPEED_THRESHOLD = 200 * 1024  // 200 KB/s
+const SLOW_TIMEOUT = 20                  // seconds
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -86,6 +89,8 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [streamError, setStreamError] = useState<string | null>(null)
   const [waitSeconds, setWaitSeconds] = useState(0)
   const waitSecondsRef = useRef(0)
+  const peersRef = useRef(0)
+  const downloadSpeedRef = useRef(0)
 
   // Video element state
   const [videoCanPlay, setVideoCanPlay] = useState(false) // true once browser has enough data
@@ -161,8 +166,14 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     waitSecondsRef.current = 0
     setVideoCanPlay(false)
     setVideoErrorCount(0)
-    // Fire prewarm immediately
+    peersRef.current = 0
+    downloadSpeedRef.current = 0
+    // Fire prewarm for current source immediately
     api.post('/api/stream/prewarm', { magnet: stream.magnet, fileIdx: stream.fileIdx }).catch(() => {})
+    // Pre-warm next 2 sources in background so they're ready when we need them
+    for (const next of list.slice(idx + 1, idx + 3)) {
+      api.post('/api/stream/prewarm', { magnet: next.magnet, fileIdx: next.fileIdx }).catch(() => {})
+    }
   }
 
   // ----- Wait-time counter (shows elapsed seconds while loading) -----
@@ -173,8 +184,15 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     const iv = setInterval(() => {
       waitSecondsRef.current++
       setWaitSeconds(waitSecondsRef.current)
-      // After PRELOAD_TIMEOUT seconds with no preload, move to next stream
-      if (waitSecondsRef.current >= PRELOAD_TIMEOUT) {
+
+      const t = waitSecondsRef.current
+      const speed = downloadSpeedRef.current
+      const p = peersRef.current
+
+      // Skip if: hard timeout OR (has peers but speed too low for too long)
+      const slowAndStuck = t >= SLOW_TIMEOUT && p > 0 && speed < SLOW_SPEED_THRESHOLD
+      if (t >= PRELOAD_TIMEOUT || slowAndStuck) {
+        clearInterval(iv)
         setStreamIndex((prev) => {
           const next = prev + 1
           setStreams((s) => { startStream(s, next); return s })
@@ -199,7 +217,9 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
         if (cancelled) return
         const s = r.data
         setStreamPhase(s.phase)
+        peersRef.current = s.peers
         setPeers(s.peers)
+        downloadSpeedRef.current = s.downloadSpeed
         setDownloadSpeed(s.downloadSpeed)
         setPreloadBytes(s.preloadBytes)
         setPreloadTotal(s.preloadTotal)
