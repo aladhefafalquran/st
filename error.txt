@@ -1,228 +1,55 @@
-browser console 
-Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
-client.ts:14  GET http://localhost:3001/api/auth/me 401 (Unauthorized)
-apiFetch @ client.ts:14
-getMe @ auth.ts:5
-(anonymous) @ useAuth.ts:13
-commitHookEffectListMount @ chunk-CXJFNHWJ.js?v=447eb166:16963
-commitPassiveMountOnFiber @ chunk-CXJFNHWJ.js?v=447eb166:18206
-commitPassiveMountEffects_complete @ chunk-CXJFNHWJ.js?v=447eb166:18179
-commitPassiveMountEffects_begin @ chunk-CXJFNHWJ.js?v=447eb166:18169
-commitPassiveMountEffects @ chunk-CXJFNHWJ.js?v=447eb166:18159
-flushPassiveEffectsImpl @ chunk-CXJFNHWJ.js?v=447eb166:19543
-flushPassiveEffects @ chunk-CXJFNHWJ.js?v=447eb166:19500
-(anonymous) @ chunk-CXJFNHWJ.js?v=447eb166:19381
-workLoop @ chunk-CXJFNHWJ.js?v=447eb166:197
-flushWork @ chunk-CXJFNHWJ.js?v=447eb166:176
-performWorkUntilDeadline @ chunk-CXJFNHWJ.js?v=447eb166:384Understand this error
-client.ts:14  GET http://localhost:3001/api/auth/me 401 (Unauthorized)
-apiFetch @ client.ts:14
-getMe @ auth.ts:5
-(anonymous) @ useAuth.ts:13
-commitHookEffectListMount @ chunk-CXJFNHWJ.js?v=447eb166:16963
-invokePassiveEffectMountInDEV @ chunk-CXJFNHWJ.js?v=447eb166:18374
-invokeEffectsInDev @ chunk-CXJFNHWJ.js?v=447eb166:19754
-commitDoubleInvokeEffectsInDEV @ chunk-CXJFNHWJ.js?v=447eb166:19739
-flushPassiveEffectsImpl @ chunk-CXJFNHWJ.js?v=447eb166:19556
-flushPassiveEffects @ chunk-CXJFNHWJ.js?v=447eb166:19500
-(anonymous) @ chunk-CXJFNHWJ.js?v=447eb166:19381
-workLoop @ chunk-CXJFNHWJ.js?v=447eb166:197
-flushWork @ chunk-CXJFNHWJ.js?v=447eb166:176
-performWorkUntilDeadline @ chunk-CXJFNHWJ.js?v=447eb166:384Understand this error
-client.ts:14  GET http://localhost:3001/api/auth/me 401 (Unauthorized)
-apiFetch @ client.ts:14
-getMe @ auth.ts:5
-(anonymous) @ useAuth.ts:13
-commitHookEffectListMount @ chunk-CXJFNHWJ.js?v=447eb166:16963
-invokePassiveEffectMountInDEV @ chunk-CXJFNHWJ.js?v=447eb166:18374
-invokeEffectsInDev @ chunk-CXJFNHWJ.js?v=447eb166:19754
-commitDoubleInvokeEffectsInDEV @ chunk-CXJFNHWJ.js?v=447eb166:19739
-flushPassiveEffectsImpl @ chunk-CXJFNHWJ.js?v=447eb166:19556
-flushPassiveEffects @ chunk-CXJFNHWJ.js?v=447eb166:19500
-(anonymous) @ chunk-CXJFNHWJ.js?v=447eb166:19381
-workLoop @ chunk-CXJFNHWJ.js?v=447eb166:197
-flushWork @ chunk-CXJFNHWJ.js?v=447eb166:176
-performWorkUntilDeadline @ chunk-CXJFNHWJ.js?v=447eb166:384Understand this error
-client.ts:14  GET http://localhost:3001/api/auth/me 401 (Unauthorized)
-apiFetch @ client.ts:14
-getMe @ auth.ts:5
-(anonymous) @ useAuth.ts:13
-commitHookEffectListMount @ chunk-CXJFNHWJ.js?v=447eb166:16963
-commitPassiveMountOnFiber @ chunk-CXJFNHWJ.js?v=447eb166:18206
-commitPassiveMountEffects_complete @ chunk-CXJFNHWJ.js?v=447eb166:18179
-commitPassiveMountEffects_begin @ chunk-CXJFNHWJ.js?v=447eb166:18169
-commitPassiveMountEffects @ chunk-CXJFNHWJ.js?v=447eb166:18159
-flushPassiveEffectsImpl @ chunk-CXJFNHWJ.js?v=447eb166:19543
-flushPassiveEffects @ chunk-CXJFNHWJ.js?v=447eb166:19500
-(anonymous) @ chunk-CXJFNHWJ.js?v=447eb166:19381
-workLoop @ chunk-CXJFNHWJ.js?v=447eb166:197
-flushWork @ chunk-CXJFNHWJ.js?v=447eb166:176
-performWorkUntilDeadline @ chunk-CXJFNHWJ.js?v=447eb166:384Understand this error
-chunk-CXJFNHWJ.js?v=447eb166:1233 Allow attribute will take precedence over 'allowfullscreen'.
-setValueForProperty @ chunk-CXJFNHWJ.js?v=447eb166:1233
-setInitialDOMProperties @ chunk-CXJFNHWJ.js?v=447eb166:7494
-setInitialProperties @ chunk-CXJFNHWJ.js?v=447eb166:7627
-finalizeInitialChildren @ chunk-CXJFNHWJ.js?v=447eb166:8392
-completeWork @ chunk-CXJFNHWJ.js?v=447eb166:16341
-completeUnitOfWork @ chunk-CXJFNHWJ.js?v=447eb166:19277
-performUnitOfWork @ chunk-CXJFNHWJ.js?v=447eb166:19259
-workLoopSync @ chunk-CXJFNHWJ.js?v=447eb166:19190
-renderRootSync @ chunk-CXJFNHWJ.js?v=447eb166:19169
-performConcurrentWorkOnRoot @ chunk-CXJFNHWJ.js?v=447eb166:18728
-workLoop @ chunk-CXJFNHWJ.js?v=447eb166:197
-flushWork @ chunk-CXJFNHWJ.js?v=447eb166:176
-performWorkUntilDeadline @ chunk-CXJFNHWJ.js?v=447eb166:384Understand this warning
-1:20  GET https://acscdn.com/script/aclib.js net::ERR_BLOCKED_BY_CLIENTUnderstand this error
-1:43  GET https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015 net::ERR_BLOCKED_BY_CLIENTUnderstand this error
-3content-main.js:118 ReferenceError: hjhca1
-    at Math.get (content-main.js:112:7998)
-    at Xe (content-main.js:112:6551)
-    at abort-current-inline-script (content-main.js:112:16682)
-    at callback (content-main.js:117:32)
-    at runSnippets (content-main.js:842:7)
-    at HTMLDocument.onFiltersReceived (content-main.js:968:5)
-callback @ content-main.js:118
-runSnippets @ content-main.js:842
-onFiltersReceived @ content-main.js:968
-ae @ content.js:18
-Promise.then
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18Understand this error
-content-main.js:118 ReferenceError: hjhca1
-    at Math.get (content-main.js:112:7998)
-    at Xe (content-main.js:112:6551)
-    at ht (content-main.js:112:7871)
-    at abort-on-property-read (content-main.js:112:17723)
-    at callback (content-main.js:117:32)
-    at runSnippets (content-main.js:842:7)
-    at HTMLDocument.onFiltersReceived (content-main.js:968:5)
-callback @ content-main.js:118
-runSnippets @ content-main.js:842
-onFiltersReceived @ content-main.js:968
-ae @ content.js:18
-Promise.then
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18Understand this error
-1:27 Uncaught TypeError: aclib.runInPagePush is not a function
-    at 1:27:11
-(anonymous) @ 1:27Understand this error
-1:36 Uncaught TypeError: aclib.runPop is not a function
-    at 1:36:11
-(anonymous) @ 1:36Understand this error
-3content-main.js:118 ReferenceError: 4i2iil
-    at Math.get (content-main.js:112:7998)
-    at Xe (content-main.js:112:6551)
-    at abort-current-inline-script (content-main.js:112:16682)
-    at callback (content-main.js:117:32)
-    at runSnippets (content-main.js:842:7)
-    at HTMLDocument.onFiltersReceived (content-main.js:968:5)
-callback @ content-main.js:118
-runSnippets @ content-main.js:842
-onFiltersReceived @ content-main.js:968
-ae @ content.js:18
-Promise.then
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ 1:43
-(anonymous) @ 1:43Understand this error
-content-main.js:118 ReferenceError: 4i2iil
-    at Math.get (content-main.js:112:7998)
-    at Xe (content-main.js:112:6551)
-    at ht (content-main.js:112:7871)
-    at abort-on-property-read (content-main.js:112:17723)
-    at callback (content-main.js:117:32)
-    at runSnippets (content-main.js:842:7)
-    at HTMLDocument.onFiltersReceived (content-main.js:968:5)
-callback @ content-main.js:118
-runSnippets @ content-main.js:842
-onFiltersReceived @ content-main.js:968
-ae @ content.js:18
-Promise.then
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ content.js:18
-(anonymous) @ 1:43
-(anonymous) @ 1:43Understand this error
-1:54  GET https://s10.histats.com/js15_as.js net::ERR_BLOCKED_BY_CLIENT
-(anonymous) @ 1:54
-(anonymous) @ 1:55Understand this error
-content.1.bundle.js:30633 Uncaught SecurityError: Failed to read a named property 'originalWindow' from 'Window': Blocked a frame with origin "https://vidsrcme.ru" from accessing a cross-origin frame.
-    at new Recorder (content.1.bundle.js:30633:35)
-    at Proxy.<anonymous> (content.1.bundle.js:30741:16)
-    at content.1.bundle.js:38374:6
-    at content.1.bundle.js:38381:3
-Recorder @ content.1.bundle.js:30633
-(anonymous) @ content.1.bundle.js:30741
-(anonymous) @ content.1.bundle.js:38374
-(anonymous) @ content.1.bundle.js:38381Understand this error
-vidsrcme.ru/embed/tv/1434/1-1:279  GET https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015 net::ERR_BLOCKED_BY_CLIENTUnderstand this error
-vidsrcme.ru/embed/tv/1434/1-1:279  GET https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015 net::ERR_BLOCKED_BY_CLIENTUnderstand this error
-  GET https://qohxlvnwqqzr.7qjp23853ovutp.cfd/kVnz8cqz45P4JNh/VvMrO net::ERR_BLOCKED_BY_CLIENT
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-i @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-e @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-n @ vidsrcme.ru/embed/tv/1434/1-1:75
-r @ vidsrcme.ru/sbx.js?t=1754734900:2
-dtc_sbx @ vidsrcme.ru/sbx.js?t=1754734900:4
-(anonymous) @ vidsrcme.ru/sbx.js?t=1754734900:14Understand this error
-  GET https://qohxlvnwqqzr.7qjp23853ovutp.cfd/kVnz8cqz45P4JNh/VvMrO net::ERR_BLOCKED_BY_CLIENT
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-i @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-e @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-n @ vidsrcme.ru/embed/tv/1434/1-1:75
-r @ vidsrcme.ru/sbx.js?t=1754734900:2
-dtc_sbx @ vidsrcme.ru/sbx.js?t=1754734900:4
-(anonymous) @ vidsrcme.ru/sbx.js?t=1754734900:14Understand this error
-  GET https://z6.qv9uiu4nn3i446.rest/kcfx4L2wo78Bb29g/VvMrO net::ERR_BLOCKED_BY_CLIENT
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-i @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-Promise.catch
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-e @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-n @ vidsrcme.ru/embed/tv/1434/1-1:75
-r @ vidsrcme.ru/sbx.js?t=1754734900:2
-dtc_sbx @ vidsrcme.ru/sbx.js?t=1754734900:4
-(anonymous) @ vidsrcme.ru/sbx.js?t=1754734900:14Understand this error
-  GET https://z6.qv9uiu4nn3i446.rest/kcfx4L2wo78Bb29g/VvMrO net::ERR_BLOCKED_BY_CLIENT
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-i @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-Promise.catch
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-e @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-(anonymous) @ vidsrcme.ru/embed/tv/1434/1-1:75
-n @ vidsrcme.ru/embed/tv/1434/1-1:75
-r @ vidsrcme.ru/sbx.js?t=1754734900:2
-dtc_sbx @ vidsrcme.ru/sbx.js?t=1754734900:4
-(anonymous) @ vidsrcme.ru/sbx.js?t=1754734900:14Understand this error
-  GET https://vidsrcme.ru/sbx.html 404 (Not Found)
-r @ vidsrcme.ru/sbx.js?t=1754734900:2
-dtc_sbx @ vidsrcme.ru/sbx.js?t=1754734900:4
-(anonymous) @ vidsrcme.ru/sbx.js?t=1754734900:14Understand this error
-content.1.bundle.js:30633 Uncaught SecurityError: Failed to read a named property 'originalWindow' from 'Window': Blocked a frame with origin "https://vidsrcme.ru" from accessing a cross-origin frame.
-    at new Recorder (content.1.bundle.js:30633:35)
-    at Proxy.<anonymous> (content.1.bundle.js:30741:16)
-    at content.1.bundle.js:38374:6
-    at content.1.bundle.js:38381:3
-Recorder @ content.1.bundle.js:30633
-(anonymous) @ content.1.bundle.js:30741
-(anonymous) @ content.1.bundle.js:38374
-(anonymous) @ content.1.bundle.js:38381Understand this error
-sbx.html:37  GET https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015 net::ERR_BLOCKED_BY_CLIENTUnderstand this error
+GET https://xthexbeastx-stremio.hf.space/api/auth/me 401 (Unauthorized)
+(anonymous) @ index-5vYuOSxe.js:69
+xhr @ index-5vYuOSxe.js:69
+Rd @ index-5vYuOSxe.js:71
+_request @ index-5vYuOSxe.js:72
+request @ index-5vYuOSxe.js:71
+Pn.<computed> @ index-5vYuOSxe.js:72
+(anonymous) @ index-5vYuOSxe.js:67
+(anonymous) @ index-5vYuOSxe.js:74
+Zs @ index-5vYuOSxe.js:40
+nr @ index-5vYuOSxe.js:40
+(anonymous) @ index-5vYuOSxe.js:40
+re @ index-5vYuOSxe.js:25
+ke @ index-5vYuOSxe.js:25Understand this error
+index-5vYuOSxe.js:69  POST https://xthexbeastx-stremio.hf.space/api/auth/login 500 (Internal Server Error)
+(anonymous) @ index-5vYuOSxe.js:69
+xhr @ index-5vYuOSxe.js:69
+Rd @ index-5vYuOSxe.js:71
+_request @ index-5vYuOSxe.js:72
+request @ index-5vYuOSxe.js:71
+(anonymous) @ index-5vYuOSxe.js:72
+(anonymous) @ index-5vYuOSxe.js:67
+P @ index-5vYuOSxe.js:74
+yf @ index-5vYuOSxe.js:37
+Sf @ index-5vYuOSxe.js:37
+kf @ index-5vYuOSxe.js:37
+uu @ index-5vYuOSxe.js:37
+cu @ index-5vYuOSxe.js:37
+(anonymous) @ index-5vYuOSxe.js:37
+mi @ index-5vYuOSxe.js:40
+va @ index-5vYuOSxe.js:37
+mo @ index-5vYuOSxe.js:37
+Xl @ index-5vYuOSxe.js:37
+Uf @ index-5vYuOSxe.js:37Understand this error
+index-5vYuOSxe.js:69  POST https://xthexbeastx-stremio.hf.space/api/auth/login 500 (Internal Server Error)
+(anonymous) @ index-5vYuOSxe.js:69
+xhr @ index-5vYuOSxe.js:69
+Rd @ index-5vYuOSxe.js:71
+_request @ index-5vYuOSxe.js:72
+request @ index-5vYuOSxe.js:71
+(anonymous) @ index-5vYuOSxe.js:72
+(anonymous) @ index-5vYuOSxe.js:67
+P @ index-5vYuOSxe.js:74
+yf @ index-5vYuOSxe.js:37
+Sf @ index-5vYuOSxe.js:37
+kf @ index-5vYuOSxe.js:37
+uu @ index-5vYuOSxe.js:37
+cu @ index-5vYuOSxe.js:37
+(anonymous) @ index-5vYuOSxe.js:37
+mi @ index-5vYuOSxe.js:40
+va @ index-5vYuOSxe.js:37
+mo @ index-5vYuOSxe.js:37
+Xl @ index-5vYuOSxe.js:37
+Uf @ index-5vYuOSxe.js:37Understand this error
+index-5vYuOSxe.js:69  POST https://xthexbeastx-stremio.hf.space/api/auth/register 503 (Service Unavailable)

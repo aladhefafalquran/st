@@ -9,6 +9,7 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default('http://localhost:5173'),
   PORT: z.coerce.number().default(3001),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  STREMIO_ADDONS: z.string().default('https://torrentio.strem.fun'),
 })
 
 export const env = envSchema.parse(process.env)

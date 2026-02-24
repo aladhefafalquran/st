@@ -8,6 +8,7 @@ import tmdbRouter from './routes/tmdb.js'
 import subtitlesRouter from './routes/subtitles.js'
 import watchlistRouter from './routes/watchlist.js'
 import historyRouter from './routes/history.js'
+import streamRouter from './routes/stream.js'
 
 const app = express()
 
@@ -29,6 +30,7 @@ app.use('/api/tmdb', tmdbRouter)
 app.use('/api/subtitles', subtitlesRouter)
 app.use('/api/watchlist', watchlistRouter)
 app.use('/api/history', historyRouter)
+app.use('/api/stream', streamRouter)
 
 app.listen(env.PORT, () => {
   console.log(`Server listening on port ${env.PORT}`)
