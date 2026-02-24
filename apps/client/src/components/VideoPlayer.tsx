@@ -354,18 +354,34 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setActiveTrack(track)
     setSubtitleError(null)
     try {
-      const r = await api.get(`/api/subtitles/download/${track.fileId}`, { responseType: 'text' })
-      setCues(parseVtt(r.data))
+      // Step 1: server returns the direct download URL (uses OS API key, not quota for file fetch)
+      const linkRes = await api.get<{ url: string }>(`/api/subtitles/link/${track.fileId}`)
+      const fileUrl = linkRes.data.url
+
+      // Step 2: browser fetches the file directly from OpenSubtitles CDN using the user's IP
+      // (avoids datacenter IP blocks on HF Space)
+      const srtRes = await fetch(fileUrl)
+      if (!srtRes.ok) throw new Error(`CDN returned ${srtRes.status}`)
+      const text = await srtRes.text()
+
+      let vtt = text
+      if (!text.startsWith('WEBVTT')) {
+        vtt = 'WEBVTT\n\n' + text
+          .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+          .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+      }
+      setCues(parseVtt(vtt))
     } catch (err: any) {
-      // responseType:'text' means error body comes back as a raw JSON string — parse it
       let msg = 'Download failed'
       const raw = err?.response?.data
       if (typeof raw === 'string') {
         try { msg = JSON.parse(raw)?.error ?? msg } catch { msg = raw.slice(0, 120) }
       } else if (raw?.error) {
         msg = raw.error
+      } else if (err?.message) {
+        msg = err.message
       }
-      console.error('[subtitle download]', err?.response?.status, msg)
+      console.error('[subtitle download]', err?.response?.status ?? '', msg)
       setSubtitleError(msg)
       setCues([])
     }

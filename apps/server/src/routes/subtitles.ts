@@ -12,16 +12,29 @@ const osHeaders = {
   'User-Agent': 'StreamTime v1.0',
 }
 
-// Two-level cache: avoid re-calling the download endpoint (burns quota) for the same fileId
 const vttCache = new Map<string, string>()   // fileId → VTT content
-const linkCache = new Map<string, string>()  // fileId → download URL (survives across client reloads)
+const linkCache = new Map<string, string>()  // fileId → download URL
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  let lastErr: any
+  for (let i = 0; i < retries; i++) {
+    try { return await fn() } catch (err: any) {
+      lastErr = err
+      if (err?.response?.status === 503 && i < retries - 1) {
+        await sleep(1200 * (i + 1)) // 1.2s, 2.4s backoff
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastErr
+}
 
 router.get('/search', async (req, res) => {
   const { imdb_id, type, languages, season, episode } = req.query as Record<string, string>
-  if (!imdb_id) {
-    res.status(400).json({ error: 'Missing imdb_id' })
-    return
-  }
+  if (!imdb_id) { res.status(400).json({ error: 'Missing imdb_id' }); return }
 
   try {
     const params = new URLSearchParams()
@@ -35,7 +48,9 @@ router.get('/search', async (req, res) => {
     }
     if (languages) params.set('languages', languages)
 
-    const response = await axios.get(`${OS_API}/subtitles?${params}`, { headers: osHeaders })
+    const response = await withRetry(() =>
+      axios.get(`${OS_API}/subtitles?${params}`, { headers: osHeaders })
+    )
     const results: SubtitleTrack[] = (response.data.data || [])
       .filter((item: any) => item.attributes?.files?.length > 0)
       .map((item: any) => ({
@@ -52,10 +67,48 @@ router.get('/search', async (req, res) => {
   }
 })
 
+// Returns the direct download URL to the client so the browser fetches the file
+// (user's IP, not datacenter IP — avoids OpenSubtitles IP blocks on downloads)
+router.get('/link/:fileId', async (req, res) => {
+  const { fileId } = req.params
+
+  if (linkCache.has(fileId)) {
+    res.json({ url: linkCache.get(fileId) })
+    return
+  }
+
+  try {
+    const downloadRes = await withRetry(() =>
+      axios.post(`${OS_API}/download`, { file_id: parseInt(fileId) }, { headers: osHeaders })
+    )
+    const url: string = downloadRes.data.link
+    if (url) linkCache.set(fileId, url)
+    res.json({ url })
+  } catch (err: any) {
+    const httpStatus: number = err?.response?.status ?? 0
+    const osData = err?.response?.data
+    const msg: string =
+      osData?.message ??
+      (Array.isArray(osData?.errors) ? osData.errors.join(', ') : null) ??
+      err?.message ?? 'Unknown error'
+    console.error(`[subtitles] link error: HTTP ${httpStatus} — ${msg}`)
+
+    if (httpStatus === 406) {
+      res.status(429).json({ error: 'Daily subtitle download limit reached.' })
+    } else if (httpStatus === 503) {
+      res.status(503).json({ error: 'Subtitle service temporarily unavailable (503). Try again in a moment.' })
+    } else if (httpStatus === 401 || httpStatus === 403) {
+      res.status(httpStatus).json({ error: `Subtitle auth failed — check OPENSUBTITLES_API_KEY env var.` })
+    } else {
+      res.status(500).json({ error: `Subtitle link error: ${msg}` })
+    }
+  }
+})
+
+// Keep old /download route as a server-side fallback
 router.get('/download/:fileId', async (req, res) => {
   const { fileId } = req.params
 
-  // 1. VTT already downloaded → serve from memory
   if (vttCache.has(fileId)) {
     res.setHeader('Content-Type', 'text/vtt')
     res.send(vttCache.get(fileId))
@@ -64,60 +117,46 @@ router.get('/download/:fileId', async (req, res) => {
 
   try {
     let fileUrl: string
-
-    // 2. Download link cached → skip the POST (saves quota)
     if (linkCache.has(fileId)) {
       fileUrl = linkCache.get(fileId)!
     } else {
-      // 3. Ask OpenSubtitles for the download link
-      const downloadRes = await axios.post(
-        `${OS_API}/download`,
-        { file_id: parseInt(fileId) },
-        { headers: osHeaders }
+      const downloadRes = await withRetry(() =>
+        axios.post(`${OS_API}/download`, { file_id: parseInt(fileId) }, { headers: osHeaders })
       )
       fileUrl = downloadRes.data.link
       if (fileUrl) linkCache.set(fileId, fileUrl)
     }
 
-    const fileRes = await axios.get(fileUrl, { responseType: 'text' })
+    const fileRes = await withRetry(() =>
+      axios.get(fileUrl, { responseType: 'text' })
+    )
     let content: string = fileRes.data
-
-    if (!content.startsWith('WEBVTT')) {
-      content = srtToVtt(content)
-    }
+    if (!content.startsWith('WEBVTT')) content = srtToVtt(content)
 
     vttCache.set(fileId, content)
     res.setHeader('Content-Type', 'text/vtt')
     res.send(content)
   } catch (err: any) {
     const httpStatus: number = err?.response?.status ?? 0
-    // Extract the error message OpenSubtitles returned
     const osData = err?.response?.data
-    const osMessage: string =
+    const msg: string =
       osData?.message ??
       (Array.isArray(osData?.errors) ? osData.errors.join(', ') : null) ??
-      err?.message ??
-      'Unknown error'
+      err?.message ?? 'Unknown error'
+    console.error(`[subtitles] download error: HTTP ${httpStatus} — ${msg}`)
 
-    console.error(`[subtitles] download error: HTTP ${httpStatus} — ${osMessage}`)
-
-    // Map common OS errors to meaningful client messages
-    if (httpStatus === 406) {
-      res.status(429).json({ error: 'Daily subtitle download limit reached. Try again tomorrow.' })
-    } else if (httpStatus === 401 || httpStatus === 403) {
-      res.status(httpStatus).json({ error: `Subtitle service auth failed (${httpStatus}). Check OPENSUBTITLES_API_KEY.` })
-    } else {
-      res.status(500).json({ error: `Subtitle download failed: ${osMessage}` })
-    }
+    if (httpStatus === 406) res.status(429).json({ error: 'Daily subtitle download limit reached.' })
+    else if (httpStatus === 503) res.status(503).json({ error: 'Subtitle service temporarily unavailable (503).' })
+    else if (httpStatus === 401 || httpStatus === 403) res.status(httpStatus).json({ error: 'Subtitle auth failed.' })
+    else res.status(500).json({ error: `Subtitle download failed: ${msg}` })
   }
 })
 
 function srtToVtt(srt: string): string {
-  const vtt = srt
+  return 'WEBVTT\n\n' + srt
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
-  return 'WEBVTT\n\n' + vtt
 }
 
 export default router
