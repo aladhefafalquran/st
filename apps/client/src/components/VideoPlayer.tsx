@@ -4,6 +4,8 @@ import { useAuthStore } from '../store/authStore'
 import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shared'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
+// Max seconds to wait for preload before giving up and trying next stream
+const PRELOAD_TIMEOUT = 120
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -37,8 +39,7 @@ function formatTime(s: number): string {
 }
 
 function formatSpeed(bps: number): string {
-  if (bps < 1024) return `${bps} B/s`
-  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(0)} KB/s`
   return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`
 }
 
@@ -68,22 +69,29 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const containerRef = useRef<HTMLDivElement>(null)
   const { isAuthenticated } = useAuthStore()
 
-  // Torrent state
+  // Torrent / loading state
   const [streams, setStreams] = useState<TorrentOption[]>([])
   const [streamsLoading, setStreamsLoading] = useState(true)
+  const [streamIndex, setStreamIndex] = useState(0)
   const [selectedStream, setSelectedStream] = useState<TorrentOption | null>(null)
   const [streamUrl, setStreamUrl] = useState<string | null>(null)
+  // Ref mirrors streamUrl so polling closure always sees current value
+  const streamUrlRef = useRef<string | null>(null)
+
   const [streamPhase, setStreamPhase] = useState<'waiting' | 'connecting' | 'ready'>('waiting')
   const [peers, setPeers] = useState(0)
   const [downloadSpeed, setDownloadSpeed] = useState(0)
-  const [preloadDone, setPreloadDone] = useState(false)
   const [preloadBytes, setPreloadBytes] = useState(0)
   const [preloadTotal, setPreloadTotal] = useState(5 * 1024 * 1024)
   const [streamError, setStreamError] = useState<string | null>(null)
-  const [showQualityPicker, setShowQualityPicker] = useState(false)
-  const [streamIndex, setStreamIndex] = useState(0)
+  const [waitSeconds, setWaitSeconds] = useState(0)
+  const waitSecondsRef = useRef(0)
 
-  // Player controls state
+  // Video element state
+  const [videoCanPlay, setVideoCanPlay] = useState(false) // true once browser has enough data
+  const [videoErrorCount, setVideoErrorCount] = useState(0)
+
+  // Player controls
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -92,6 +100,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [fullscreen, setFullscreen] = useState(false)
   const [controlsVisible, setControlsVisible] = useState(true)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showQualityPicker, setShowQualityPicker] = useState(false)
 
   // Subtitle state
   const [subsOpen, setSubsOpen] = useState(false)
@@ -102,7 +111,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [activeCue, setActiveCue] = useState<string | null>(null)
   const [subtitleLoading, setSubtitleLoading] = useState(false)
 
-  // Watch history
   const watchStartRef = useRef<number>(Date.now())
 
   // ----- Fetch available streams -----
@@ -111,9 +119,14 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setStreams([])
     setSelectedStream(null)
     setStreamUrl(null)
+    streamUrlRef.current = null
     setStreamPhase('waiting')
     setStreamError(null)
     setStreamIndex(0)
+    setWaitSeconds(0)
+    waitSecondsRef.current = 0
+    setVideoCanPlay(false)
+    setVideoErrorCount(0)
 
     const params: Record<string, string> = { imdb_id: imdbId, type: mediaType }
     if (mediaType === 'tv' && season) params.season = String(season)
@@ -123,70 +136,93 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       .then((r) => {
         setStreams(r.data.torrents)
         if (r.data.torrents.length > 0) {
-          pickStream(r.data.torrents, 0)
+          startStream(r.data.torrents, 0)
         } else {
-          setStreamError('No streams found for this title.')
+          setStreamError('No streams found.')
         }
       })
-      .catch(() => setStreamError('Failed to fetch streams. Check your connection.'))
+      .catch(() => setStreamError('Failed to fetch streams.'))
       .finally(() => setStreamsLoading(false))
   }, [imdbId, mediaType, season, episode])
 
-  function pickStream(list: TorrentOption[], idx: number) {
+  function startStream(list: TorrentOption[], idx: number) {
     const stream = list[idx]
-    if (!stream) { setStreamError('No more streams available.'); return }
+    if (!stream) { setStreamError('No more sources available.'); return }
     setSelectedStream(stream)
+    setStreamUrl(null)
+    streamUrlRef.current = null
     setStreamPhase('waiting')
     setPeers(0)
     setDownloadSpeed(0)
-    setPreloadDone(false)
     setPreloadBytes(0)
-    setStreamUrl(null)
     setStreamError(null)
-
-    // Fire prewarm
+    setWaitSeconds(0)
+    waitSecondsRef.current = 0
+    setVideoCanPlay(false)
+    setVideoErrorCount(0)
+    // Fire prewarm immediately
     api.post('/api/stream/prewarm', { magnet: stream.magnet, fileIdx: stream.fileIdx }).catch(() => {})
   }
 
-  // ----- Poll status until ready -----
+  // ----- Wait-time counter (shows elapsed seconds while loading) -----
   useEffect(() => {
-    if (!selectedStream || streamUrl) return
+    if (streamUrl || streamError || streamsLoading) return
+    waitSecondsRef.current = 0
+    setWaitSeconds(0)
+    const iv = setInterval(() => {
+      waitSecondsRef.current++
+      setWaitSeconds(waitSecondsRef.current)
+      // After PRELOAD_TIMEOUT seconds with no preload, move to next stream
+      if (waitSecondsRef.current >= PRELOAD_TIMEOUT) {
+        setStreamIndex((prev) => {
+          const next = prev + 1
+          setStreams((s) => { startStream(s, next); return s })
+          return next
+        })
+      }
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [selectedStream, streamUrl, streamError, streamsLoading])
 
+  // ----- Poll status until preload is done -----
+  useEffect(() => {
+    if (!selectedStream || streamUrlRef.current) return
     let cancelled = false
 
     const poll = async () => {
-      if (cancelled || !selectedStream) return
+      if (cancelled) return
       try {
         const r = await api.get('/api/stream/status', {
           params: { magnet: selectedStream.magnet, fileIdx: selectedStream.fileIdx },
         })
-        const s = r.data
         if (cancelled) return
+        const s = r.data
         setStreamPhase(s.phase)
         setPeers(s.peers)
         setDownloadSpeed(s.downloadSpeed)
-        setPreloadDone(s.preloadDone)
         setPreloadBytes(s.preloadBytes)
         setPreloadTotal(s.preloadTotal)
 
-        if (s.preloadDone || (s.phase === 'ready' && s.peers > 0)) {
-          // Ready to stream
+        // Only start playing once the server has actually buffered data
+        if (s.preloadDone && !streamUrlRef.current) {
           const qs = new URLSearchParams({ magnet: selectedStream.magnet })
           if (selectedStream.fileIdx !== undefined) qs.set('fileIdx', String(selectedStream.fileIdx))
-          setStreamUrl(`${API_BASE}/api/stream/watch?${qs}`)
+          const url = `${API_BASE}/api/stream/watch?${qs}`
+          streamUrlRef.current = url
+          setStreamUrl(url)
         }
       } catch {
-        // ignore poll errors
+        // ignore transient poll errors
       }
 
-      if (!cancelled && !streamUrl) {
+      if (!cancelled && !streamUrlRef.current) {
         setTimeout(poll, 2000)
       }
     }
 
-    const t = setTimeout(poll, 500)
+    const t = setTimeout(poll, 800)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [selectedStream, streamUrl])
+  }, [selectedStream])
 
   // ----- Video element events -----
   useEffect(() => {
@@ -198,12 +234,15 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     const onDuration = () => setDuration(v.duration)
     const onVolume = () => { setVolume(v.volume); setMuted(v.muted) }
     const onFs = () => setFullscreen(!!document.fullscreenElement)
+    const onCanPlay = () => setVideoCanPlay(true)
 
     v.addEventListener('play', onPlay)
     v.addEventListener('pause', onPause)
     v.addEventListener('timeupdate', onTime)
     v.addEventListener('durationchange', onDuration)
     v.addEventListener('volumechange', onVolume)
+    v.addEventListener('canplay', onCanPlay)
+    v.addEventListener('playing', onCanPlay)
     document.addEventListener('fullscreenchange', onFs)
     return () => {
       v.removeEventListener('play', onPlay)
@@ -211,14 +250,14 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       v.removeEventListener('timeupdate', onTime)
       v.removeEventListener('durationchange', onDuration)
       v.removeEventListener('volumechange', onVolume)
+      v.removeEventListener('canplay', onCanPlay)
+      v.removeEventListener('playing', onCanPlay)
       document.removeEventListener('fullscreenchange', onFs)
     }
   }, [streamUrl])
 
   // ----- Watch history -----
-  useEffect(() => {
-    watchStartRef.current = Date.now()
-  }, [tmdbId, season, episode])
+  useEffect(() => { watchStartRef.current = Date.now() }, [tmdbId, season, episode])
 
   useEffect(() => {
     if (!isAuthenticated || !streamUrl) return
@@ -256,46 +295,26 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
   // ----- Player control functions -----
   function togglePlay() {
-    const v = videoRef.current
-    if (!v) return
+    const v = videoRef.current; if (!v) return
     v.paused ? v.play() : v.pause()
   }
-
   function seek(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = videoRef.current
-    if (!v) return
+    const v = videoRef.current; if (!v) return
     v.currentTime = Number(e.target.value)
   }
-
   function handleVolumeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = videoRef.current
-    if (!v) return
-    v.volume = Number(e.target.value)
-    v.muted = false
+    const v = videoRef.current; if (!v) return
+    v.volume = Number(e.target.value); v.muted = false
   }
-
-  function toggleMute() {
-    const v = videoRef.current
-    if (!v) return
-    v.muted = !v.muted
-  }
-
+  function toggleMute() { const v = videoRef.current; if (!v) return; v.muted = !v.muted }
   function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      document.exitFullscreen()
-    } else {
-      const el = containerRef.current ?? videoRef.current
-      el?.requestFullscreen?.()
-    }
+    if (document.fullscreenElement) document.exitFullscreen()
+    else (containerRef.current ?? videoRef.current)?.requestFullscreen?.()
   }
 
   const fetchSubtitles = useCallback(async (lang: string) => {
-    setSubLang(lang)
-    setSubtitleLoading(true)
-    setTracks([])
-    setActiveTrack(null)
-    setCues([])
-    setActiveCue(null)
+    setSubLang(lang); setSubtitleLoading(true)
+    setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null)
     try {
       const r = await api.get('/api/subtitles/search', {
         params: { imdb_id: imdbId, type: mediaType, languages: lang },
@@ -303,9 +322,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       const list: SubtitleTrack[] = r.data
       setTracks(list)
       if (list.length > 0) await selectSubtitleTrack(list[0])
-    } finally {
-      setSubtitleLoading(false)
-    }
+    } finally { setSubtitleLoading(false) }
   }, [imdbId, mediaType])
 
   async function selectSubtitleTrack(track: SubtitleTrack | null) {
@@ -317,32 +334,54 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     } catch { setCues([]) }
   }
 
-  // Try next stream on error
   function tryNextStream() {
     const next = streamIndex + 1
+    if (next >= streams.length) {
+      setStreamError('All sources failed. Try again later.')
+      return
+    }
     setStreamIndex(next)
-    pickStream(streams, next)
+    startStream(streams, next)
+  }
+
+  // Retry same stream (e.g. after a transient video error)
+  function retryCurrentStream() {
+    if (!selectedStream) return
+    setStreamUrl(null)
+    streamUrlRef.current = null
+    setVideoCanPlay(false)
+    setVideoErrorCount(0)
+    setWaitSeconds(0)
+    waitSecondsRef.current = 0
+    setStreamPhase('waiting')
+    // Re-trigger polling by clearing and re-setting selectedStream
+    const s = selectedStream
+    setSelectedStream(null)
+    setTimeout(() => {
+      api.post('/api/stream/prewarm', { magnet: s.magnet, fileIdx: s.fileIdx }).catch(() => {})
+      setSelectedStream(s)
+    }, 300)
   }
 
   const posterSrc = backdropPath ? tmdbImg(backdropPath, 'w1280') : posterPath ? tmdbImg(posterPath, 'w500') : null
-
-  // Loading progress percentage
   const preloadPct = preloadTotal > 0 ? Math.round((preloadBytes / preloadTotal) * 100) : 0
+  const isLoading = !streamUrl && !streamError && !streamsLoading
 
-  function phaseLabel(): string {
-    if (streamPhase === 'waiting') return 'Connecting to torrent…'
-    if (streamPhase === 'connecting') {
-      return `Fetching metadata… (${peers} peers)`
-    }
-    if (preloadDone) return 'Starting playback…'
-    return `Buffering ${preloadPct}% (${formatSpeed(downloadSpeed)}, ${peers} peers)`
+  function loadingLabel(): string {
+    if (streamPhase === 'waiting') return 'Connecting to trackers…'
+    if (streamPhase === 'connecting') return `Finding peers… ${peers > 0 ? `(${peers} connected)` : ''}`
+    if (peers === 0) return 'Waiting for peers…'
+    return `Buffering ${preloadPct}%  ·  ${formatSpeed(downloadSpeed)}  ·  ${peers} peer${peers !== 1 ? 's' : ''}`
   }
+
+  // Show loading overlay over video while it hasn't fired canplay yet
+  const showLoadingOverlay = !streamUrl || !videoCanPlay
 
   return (
     <div ref={containerRef} className="relative w-full bg-black">
       <div className="relative w-full aspect-video">
 
-        {/* Video element — only rendered once stream URL is ready */}
+        {/* Video element — always mounted once streamUrl is set, never removed on error */}
         {streamUrl && (
           <video
             ref={videoRef}
@@ -350,50 +389,56 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
             className="w-full h-full"
             autoPlay
             playsInline
-            crossOrigin="use-credentials"
             onError={() => {
-              if (streamIndex < streams.length - 1) tryNextStream()
-              else setStreamError('Playback failed. All sources exhausted.')
+              const count = videoErrorCount + 1
+              setVideoErrorCount(count)
+              if (count >= 2) {
+                // Two consecutive errors on same source — try next
+                tryNextStream()
+              } else {
+                // First error: reload the same URL (might be a transient hiccup)
+                const v = videoRef.current
+                if (v) { v.load(); v.play().catch(() => {}) }
+              }
             }}
           />
         )}
 
-        {/* Loading / fetching overlay */}
-        {!streamUrl && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black">
+        {/* Loading / error overlay */}
+        {showLoadingOverlay && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10">
             {posterSrc && (
-              <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover opacity-25" />
+              <img src={posterSrc} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
             )}
-            <div className="relative flex flex-col items-center gap-4 px-6 text-center">
+            <div className="relative flex flex-col items-center gap-4 px-6 text-center max-w-sm w-full">
               {streamError ? (
                 <>
                   <p className="text-red-400 text-sm">{streamError}</p>
-                  {streamIndex < streams.length - 1 && (
-                    <button
-                      onClick={tryNextStream}
-                      className="px-4 py-2 bg-[var(--st-accent)] hover:bg-[var(--st-accent-hover)] text-white text-sm rounded-lg cursor-pointer"
-                    >
-                      Try next source
-                    </button>
-                  )}
+                  <button
+                    onClick={retryCurrentStream}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg cursor-pointer"
+                  >
+                    Retry
+                  </button>
                 </>
               ) : streamsLoading ? (
                 <>
-                  <div className="w-12 h-12 border-4 border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
+                  <div className="w-10 h-10 border-3 border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
                   <p className="text-white/70 text-sm">Finding streams…</p>
                 </>
               ) : (
                 <>
-                  <div className="w-12 h-12 border-4 border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
-                  <p className="text-white/80 text-sm font-medium">{phaseLabel()}</p>
+                  <div className="w-10 h-10 border-[3px] border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
+                  <p className="text-white/90 text-sm font-medium">{loadingLabel()}</p>
                   {selectedStream && (
                     <p className="text-white/50 text-xs">
                       {selectedStream.quality} · {selectedStream.size}
-                      {streams.length > 1 && ` · Source ${streamIndex + 1}/${streams.length}`}
+                      {streams.length > 1 && ` · source ${streamIndex + 1} / ${streams.length}`}
                     </p>
                   )}
+
                   {/* Preload progress bar */}
-                  {streamPhase === 'ready' && preloadTotal > 0 && !preloadDone && (
+                  {streamPhase === 'ready' && preloadTotal > 0 && (
                     <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-[var(--st-accent)] transition-all duration-500"
@@ -401,6 +446,19 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                       />
                     </div>
                   )}
+
+                  {/* Elapsed time + manual next-source button */}
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-white/30 text-xs">{waitSeconds}s</span>
+                    {streams.length > 1 && streamIndex < streams.length - 1 && (
+                      <button
+                        onClick={tryNextStream}
+                        className="text-xs text-white/60 hover:text-white underline cursor-pointer"
+                      >
+                        Try next source
+                      </button>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -408,8 +466,8 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
         )}
 
         {/* Subtitle overlay */}
-        {streamUrl && activeCue && (
-          <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-16">
+        {streamUrl && videoCanPlay && activeCue && (
+          <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-16 z-20">
             <div
               className="bg-black/75 text-white text-base sm:text-lg px-3 py-1.5 rounded text-center max-w-3xl leading-relaxed"
               style={{ textShadow: '1px 1px 2px black' }}
@@ -418,70 +476,41 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
           </div>
         )}
 
-        {/* Player controls overlay */}
-        {streamUrl && (
+        {/* Player controls overlay — only when video is ready */}
+        {streamUrl && videoCanPlay && (
           <div
-            className={`absolute inset-0 transition-opacity duration-300 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 transition-opacity duration-300 z-20 ${controlsVisible ? 'opacity-100' : 'opacity-0'}`}
             onMouseMove={resetHideTimer}
             onMouseEnter={resetHideTimer}
-            onClick={(e) => {
-              // click on backdrop toggles play, not on buttons
-              if ((e.target as HTMLElement).tagName === 'DIV') togglePlay()
-            }}
+            onClick={(e) => { if ((e.target as HTMLElement).tagName === 'DIV') togglePlay() }}
           >
-            {/* Bottom gradient + controls */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent px-4 pt-12 pb-3">
               {/* Seek bar */}
               <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.5}
-                value={currentTime}
-                onChange={seek}
-                onClick={(e) => e.stopPropagation()}
+                type="range" min={0} max={duration || 0} step={0.5} value={currentTime}
+                onChange={seek} onClick={(e) => e.stopPropagation()}
                 className="w-full h-1 mb-3 cursor-pointer accent-[var(--st-accent)]"
               />
-
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   {/* Play/Pause */}
-                  <button onClick={(e) => { e.stopPropagation(); togglePlay() }} className="text-white hover:text-[var(--st-accent)] transition-colors cursor-pointer">
-                    {playing ? (
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    )}
+                  <button onClick={(e) => { e.stopPropagation(); togglePlay() }} className="text-white hover:text-[var(--st-accent)] cursor-pointer">
+                    {playing
+                      ? <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                      : <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>}
                   </button>
-
                   {/* Mute */}
-                  <button onClick={(e) => { e.stopPropagation(); toggleMute() }} className="text-white hover:text-white/80 transition-colors cursor-pointer">
-                    {muted || volume === 0 ? (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16.5 12A4.5 4.5 0 0014 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
-                      </svg>
-                    )}
+                  <button onClick={(e) => { e.stopPropagation(); toggleMute() }} className="text-white hover:text-white/80 cursor-pointer">
+                    {muted || volume === 0
+                      ? <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12A4.5 4.5 0 0014 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
+                      : <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z" /></svg>}
                   </button>
-
-                  {/* Volume slider */}
                   <input
-                    type="range"
-                    min={0} max={1} step={0.05}
-                    value={muted ? 0 : volume}
+                    type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume}
                     onChange={(e) => { e.stopPropagation(); handleVolumeChange(e) }}
                     onClick={(e) => e.stopPropagation()}
                     className="w-20 h-1 cursor-pointer accent-white"
                   />
-
-                  {/* Time */}
                   <span className="text-white text-xs tabular-nums hidden sm:block">
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
@@ -494,25 +523,18 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                       onClick={(e) => { e.stopPropagation(); setShowQualityPicker((v) => !v) }}
                       className="text-xs text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded cursor-pointer"
                     >
-                      {selectedStream?.quality ?? 'Quality'}
+                      {streams[streamIndex]?.quality ?? 'Quality'}
                     </button>
                     {showQualityPicker && (
-                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg py-1 z-20 w-40 max-h-60 overflow-y-auto shadow-xl">
+                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg py-1 z-30 w-44 max-h-60 overflow-y-auto shadow-xl">
                         {streams.map((s, i) => (
                           <button
                             key={s.hash}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setStreamIndex(i)
-                              pickStream(streams, i)
-                              setShowQualityPicker(false)
-                            }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 transition-colors cursor-pointer ${
-                              i === streamIndex ? 'text-[var(--st-accent)]' : 'text-white'
-                            }`}
+                            onClick={(e) => { e.stopPropagation(); setStreamIndex(i); startStream(streams, i); setShowQualityPicker(false) }}
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${i === streamIndex ? 'text-[var(--st-accent)]' : 'text-white'}`}
                           >
                             {s.quality} · {s.size}
-                            <span className="text-white/40 ml-1">({s.seeds} seeds)</span>
+                            <span className="text-white/40 ml-1">({s.seeds}↑)</span>
                           </button>
                         ))}
                       </div>
@@ -523,33 +545,27 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                   <div className="relative">
                     <button
                       onClick={(e) => { e.stopPropagation(); setSubsOpen((v) => !v) }}
-                      className={`text-xs px-2 py-1 rounded cursor-pointer transition-colors ${activeTrack ? 'text-[var(--st-accent)]' : 'text-white bg-white/10 hover:bg-white/20'}`}
+                      className={`text-xs px-2 py-1 rounded cursor-pointer ${activeTrack ? 'text-[var(--st-accent)]' : 'text-white bg-white/10 hover:bg-white/20'}`}
                     >
                       CC
                     </button>
                     {subsOpen && (
-                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg py-1 z-20 w-48 max-h-60 overflow-y-auto shadow-xl">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(null); setSubLang(''); setSubsOpen(false) }}
-                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${!activeTrack ? 'text-[var(--st-accent)]' : 'text-white/60'}`}
-                        >
+                      <div className="absolute bottom-9 right-0 bg-[var(--st-surface)] border border-[var(--st-border)] rounded-lg py-1 z-30 w-48 max-h-60 overflow-y-auto shadow-xl">
+                        <button onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(null); setSubLang(''); setSubsOpen(false) }}
+                          className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${!activeTrack ? 'text-[var(--st-accent)]' : 'text-white/60'}`}>
                           Off
                         </button>
                         {LANGUAGES.map((lang) => (
-                          <button
-                            key={lang.code}
+                          <button key={lang.code}
                             onClick={(e) => { e.stopPropagation(); fetchSubtitles(lang.code); setSubsOpen(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${subLang === lang.code ? 'text-[var(--st-accent)]' : 'text-white'}`}
-                          >
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${subLang === lang.code ? 'text-[var(--st-accent)]' : 'text-white'}`}>
                             {subtitleLoading && subLang === lang.code ? 'Loading…' : lang.label}
                           </button>
                         ))}
                         {tracks.map((t) => (
-                          <button
-                            key={t.fileId}
+                          <button key={t.fileId}
                             onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubsOpen(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}
-                          >
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}>
                             {t.releaseName.slice(0, 28) || t.languageName}
                           </button>
                         ))}
@@ -559,26 +575,16 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
                   {/* Fullscreen */}
                   <button onClick={(e) => { e.stopPropagation(); toggleFullscreen() }} className="text-white hover:text-white/80 cursor-pointer">
-                    {fullscreen ? (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
-                      </svg>
-                    )}
+                    {fullscreen
+                      ? <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" /></svg>
+                      : <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Close quality/sub menus on outside click */}
             {(showQualityPicker || subsOpen) && (
-              <div
-                className="fixed inset-0 z-10"
-                onClick={(e) => { e.stopPropagation(); setShowQualityPicker(false); setSubsOpen(false) }}
-              />
+              <div className="fixed inset-0 z-20" onClick={(e) => { e.stopPropagation(); setShowQualityPicker(false); setSubsOpen(false) }} />
             )}
           </div>
         )}
