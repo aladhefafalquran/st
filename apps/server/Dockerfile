@@ -27,6 +27,7 @@ COPY --from=builder /app/apps/server/node_modules ./node_modules
 COPY --from=builder /app/apps/server/prisma ./prisma
 
 ENV NODE_ENV=production
-EXPOSE 3001
+ENV PORT=7860
+EXPOSE 7860
 
 CMD ["node", "dist/index.js"]
