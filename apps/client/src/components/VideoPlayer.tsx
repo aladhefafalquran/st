@@ -116,6 +116,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [cues, setCues] = useState<SubtitleCue[]>([])
   const [activeCue, setActiveCue] = useState<string | null>(null)
   const [subtitleLoading, setSubtitleLoading] = useState(false)
+  const [subtitleError, setSubtitleError] = useState<string | null>(null)
 
   const watchStartRef = useRef<number>(Date.now())
 
@@ -335,7 +336,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
   const fetchSubtitles = useCallback(async (lang: string) => {
     setSubLang(lang); setSubtitleLoading(true)
-    setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null)
+    setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null)
     try {
       const params: Record<string, string | number> = { imdb_id: imdbId, type: mediaType, languages: lang }
       if (mediaType === 'tv' && season) params.season = season
@@ -349,12 +350,17 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   }, [imdbId, mediaType, season, episode])
 
   async function selectSubtitleTrack(track: SubtitleTrack | null) {
-    if (!track) { setActiveTrack(null); setCues([]); setActiveCue(null); return }
+    if (!track) { setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null); return }
     setActiveTrack(track)
+    setSubtitleError(null)
     try {
       const r = await api.get(`/api/subtitles/download/${track.fileId}`, { responseType: 'text' })
       setCues(parseVtt(r.data))
-    } catch { setCues([]) }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? 'Download failed'
+      setSubtitleError(msg)
+      setCues([])
+    }
   }
 
   function tryNextStream() {
@@ -631,8 +637,11 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                               </div>
                             )}
 
-                            {!subtitleLoading && tracks.length === 0 && (
+                            {!subtitleLoading && tracks.length === 0 && !subtitleError && (
                               <div className="px-3 py-3 text-xs text-white/40">No subtitles found</div>
+                            )}
+                            {!subtitleLoading && subtitleError && (
+                              <div className="px-3 py-3 text-xs text-red-400 leading-relaxed">{subtitleError}</div>
                             )}
 
                             {!subtitleLoading && tracks.length > 0 && (
@@ -646,12 +655,15 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                                 {tracks.map((t) => (
                                   <button
                                     key={t.fileId}
-                                    onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubsOpen(false); setSubView('lang') }}
+                                    onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubView('lang') }}
                                     className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer leading-tight ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}
                                   >
                                     {t.releaseName.slice(0, 34) || t.languageName}
                                   </button>
                                 ))}
+                                {subtitleError && (
+                                  <div className="px-3 py-2 text-xs text-red-400 border-t border-[var(--st-border)]">{subtitleError}</div>
+                                )}
                               </>
                             )}
                           </>
