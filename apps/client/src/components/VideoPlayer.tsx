@@ -357,7 +357,15 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       const r = await api.get(`/api/subtitles/download/${track.fileId}`, { responseType: 'text' })
       setCues(parseVtt(r.data))
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Download failed'
+      // responseType:'text' means error body comes back as a raw JSON string — parse it
+      let msg = 'Download failed'
+      const raw = err?.response?.data
+      if (typeof raw === 'string') {
+        try { msg = JSON.parse(raw)?.error ?? msg } catch { msg = raw.slice(0, 120) }
+      } else if (raw?.error) {
+        msg = raw.error
+      }
+      console.error('[subtitle download]', err?.response?.status, msg)
       setSubtitleError(msg)
       setCues([])
     }
@@ -655,7 +663,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                                 {tracks.map((t) => (
                                   <button
                                     key={t.fileId}
-                                    onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t); setSubView('lang') }}
+                                    onClick={(e) => { e.stopPropagation(); selectSubtitleTrack(t) }}
                                     className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 cursor-pointer leading-tight ${activeTrack?.fileId === t.fileId ? 'text-[var(--st-accent)]' : 'text-white'}`}
                                   >
                                     {t.releaseName.slice(0, 34) || t.languageName}
