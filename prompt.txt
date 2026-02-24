@@ -1,0 +1,280 @@
+ ---
+  StreamTime — Full Project Rebuild Prompt
+
+  Build a Netflix-style streaming web app called StreamTime. Movies and TV shows are sourced from TMDB, video is played
+  via VidSrc embed iframes. Users can register/login, manage a watchlist, and view watch history.
+
+  ---
+  Stack
+
+  - Monorepo: pnpm workspaces + Turborepo
+  - Frontend (apps/client): React 18, Vite, Tailwind v4, Zustand, React Router v6, TypeScript
+  - Backend (apps/server): Express, TypeScript, Prisma, PostgreSQL (Neon)
+  - Shared (packages/shared): TypeScript types shared between client and server
+  - Deploy: Cloudflare Pages (client) + Railway (server)
+
+  ---
+  Monorepo Structure
+
+  streamTime/
+  ├── package.json              # pnpm workspace root
+  ├── pnpm-workspace.yaml
+  ├── turbo.json
+  ├── packages/shared/src/types/
+  │   ├── tmdb.ts               # TMDBMovie, TMDBTVShow, TMDBEpisode, TMDBSeason, etc.
+  │   ├── user.ts               # User type
+  │   ├── watchlist.ts          # WatchlistItem, WatchHistoryItem
+  │   └── subtitle.ts           # SubtitleTrack, SubtitleCue
+  └── apps/
+      ├── client/               # React + Vite + Tailwind v4
+      └── server/               # Express + Prisma
+
+  ---
+  Database Schema (Prisma + Neon PostgreSQL)
+
+  model User {
+    id           String    @id @default(cuid())
+    email        String    @unique
+    username     String    @unique
+    passwordHash String
+    sessions     Session[]
+    watchlist    Watchlist[]
+    watchHistory WatchHistory[]
+  }
+
+  model Session {
+    id        String   @id @default(cuid())
+    userId    String
+    token     String   @unique  // SHA-256 hash of JWT jti
+    expiresAt DateTime
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  }
+
+  model Watchlist {
+    id        String   @id @default(cuid())
+    userId    String
+    tmdbId    Int
+    mediaType String   // "movie" | "tv"
+    title     String
+    posterPath String?
+    addedAt   DateTime @default(now())
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    @@unique([userId, tmdbId, mediaType])
+  }
+
+  model WatchHistory {
+    id              String   @id @default(cuid())
+    userId          String
+    tmdbId          Int
+    mediaType       String
+    title           String
+    posterPath      String?
+    seasonNumber    Int?
+    episodeNumber   Int?
+    progressSeconds Int      @default(0)
+    durationSeconds Int      @default(0)
+    updatedAt       DateTime @updatedAt
+    user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  }
+
+  ---
+  Server — Express API
+
+  Auth (/api/auth):
+  - POST /register — hash password with bcrypt, create user + session, set st_token httpOnly cookie (JWT signed with
+  jti, 7-day expiry, SHA-256 hash stored in sessions table)
+  - POST /login — verify password, create session, set cookie
+  - POST /logout — delete session from DB, clear cookie
+  - GET /me — verify JWT + session hash, return user
+
+  TMDB proxy (/api/tmdb) — server proxies all TMDB calls (API key never reaches client):
+  - GET /trending — trending all week
+  - GET /movies/popular — popular movies
+  - GET /movies/top-rated — top rated movies
+  - GET /tv/popular — popular TV shows
+  - GET /movies/:id — movie detail with append_to_response=videos,credits,external_ids
+  - GET /tv/:id — TV show detail with append_to_response=external_ids,seasons
+  - GET /tv/:id/season/:season — season episodes
+  - GET /search?q= — multi search
+
+  Subtitles (/api/subtitles) — OpenSubtitles v3:
+  - GET /search?imdb_id=&type=&languages= — search for subtitle tracks
+  - GET /download/:fileId — fetch subtitle content, convert SRT→VTT if needed, return VTT (cache in memory Map by
+  fileId)
+
+  Watchlist (/api/watchlist):
+  - GET / — get user's watchlist
+  - POST / — add item
+  - DELETE / — remove item
+  - GET /check?tmdbId=&mediaType= — check if item is in watchlist
+
+  History (/api/history):
+  - GET / — get watch history
+  - POST / — upsert history entry (progressSeconds, durationSeconds)
+  - GET /progress?tmdbId=&mediaType=&season=&episode= — get progress for specific item
+
+  Helmet config:
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
+  }));
+
+  CORS:
+  cors({ origin: env.CLIENT_URL, credentials: true })
+
+  ---
+  Client — Pages & Components
+
+  Pages
+
+  - / — Home: hero banner (first trending item) + horizontal scrollable rows: Trending, Popular Movies, Popular TV, Top
+  Rated Movies
+  - /browse/:type — Browse: paginated grid of movies or TV shows
+  - /search?q= — Search: results from TMDB multi-search
+  - /movie/:id — MovieDetail: backdrop hero, poster, metadata, Watch Now button, Watchlist button, Trailer link, Cast
+  row
+  - /tv/:id — TVDetail: backdrop hero, poster, metadata, season selector pills, episode card grid (Netflix-style: 16:9
+  thumbnail, E{n} badge, hover play overlay, click to watch)
+  - /watch — Watch: just a back button + VideoPlayer. No spinner, no API calls. Reads from playerStore and renders
+  immediately.
+  - /watchlist — Watchlist: user's saved items
+  - /history — History: watch history
+  - /login — Login/Register: tabbed form
+
+  Key Components
+
+  - MediaCard — poster card with title + year, links to detail page
+  - MediaRow — horizontal scroll row with left/right arrow buttons
+  - HeroBanner — full-width backdrop hero with title, overview, Watch/Watchlist buttons
+  - VideoPlayer — VidSrc iframe player + subtitle overlay + source switcher + subtitle language picker + sync button +
+  fullscreen button
+  - Spinner, Button, Modal — UI primitives
+
+  State — Zustand stores
+
+  // playerStore
+  {
+    tmdbId: number | null
+    mediaType: 'movie' | 'tv' | null
+    title: string | null
+    imdbId: string | null
+    season: number | null
+    episode: number | null
+    setMedia(params): void
+    clear(): void
+  }
+
+  // authStore
+  {
+    user: User | null
+    isAuthenticated: boolean
+    setUser(user): void
+    clearUser(): void
+  }
+
+  VideoPlayer — VidSrc iframe
+
+  const SOURCES = [
+    (path) => `https://vidsrc.to/embed/${path}`,
+    (path) => `https://vidsrc.me/embed/${path}`,
+    (path) => `https://vidsrc.xyz/embed/${path}`,
+  ]
+
+  // TV:    tv/{tmdbId}/{season}/{episode}
+  // Movie: movie/{tmdbId}
+
+  <iframe
+    src={iframeSrc}
+    className="w-full h-full border-0"
+    allowFullScreen
+    allow="autoplay; fullscreen; encrypted-media"
+    referrerPolicy="no-referrer"
+  />
+
+  Subtitle overlay sits absolutely positioned over the iframe. A wall-clock timer (started when user clicks "Sync")
+  drives subtitle timing since currentTime is inaccessible from a cross-origin iframe.
+
+  Subtitles — OpenSubtitles v3
+
+  - User picks a language from a dropdown
+  - Client calls GET /api/subtitles/search?imdb_id=&type=&languages=
+  - Server searches OpenSubtitles v3 API, returns track list
+  - Client calls GET /api/subtitles/download/:fileId to get VTT content
+  - VTT is parsed into cues client-side
+  - SubtitleRenderer component shows the active cue as an overlay
+
+  ---
+  Navigation Flow (most important — must work perfectly)
+
+  Movie: MovieDetail → click "Watch Now" → setMedia({tmdbId, mediaType:'movie', title, imdbId}) → navigate('/watch') →
+  Watch renders VideoPlayer immediately
+
+  TV episode: TVDetail → click episode card → handlePlay(ep) → setMedia({tmdbId, mediaType:'tv', title, imdbId, season,
+  episode}) → navigate('/watch') → Watch renders VideoPlayer immediately
+
+  Watch page must be dead simple:
+  export function Watch() {
+    const { tmdbId, mediaType, title, imdbId, season, episode } = usePlayerStore()
+    const navigate = useNavigate()
+
+    useEffect(() => { if (!tmdbId) navigate('/') }, [tmdbId, navigate])
+
+    if (!tmdbId || !mediaType || !title || !imdbId) return null
+
+    return (
+      <div className="min-h-screen bg-black flex flex-col">
+        <div className="flex items-center gap-4 p-4 bg-black/80">
+          <button onClick={() => navigate(-1)}>← Back</button>
+          <span>{title}</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl">
+            <VideoPlayer key={`${tmdbId}-${season}-${episode}`}
+              tmdbId={tmdbId} mediaType={mediaType} title={title}
+              imdbId={imdbId} season={season ?? undefined} episode={episode ?? undefined}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  ---
+  Environment Variables
+
+  Server (Railway):
+  DATABASE_URL=         # Neon pooled connection string
+  DIRECT_URL=           # Neon direct connection string (for migrations)
+  JWT_SECRET=
+  COOKIE_SECRET=
+  TMDB_API_KEY=
+  OPENSUBTITLES_API_KEY=
+  CLIENT_URL=           # https://your-app.pages.dev
+  PORT=3001
+  NODE_ENV=production
+
+  Client (Cloudflare Pages):
+  VITE_API_URL=         # https://your-server.railway.app
+  VITE_TMDB_IMAGE_BASE= # https://image.tmdb.org/t/p
+
+  ---
+  Deployment
+
+  - Cloudflare Pages: build command pnpm --filter @streamtime/client build, output apps/client/dist. Add
+  public/_redirects: /* /index.html 200
+  - Railway: use apps/server/Dockerfile. Node 20, build with esbuild, run compiled output.
+
+  ---
+  CSS Theme Variables (Tailwind v4)
+
+  --st-bg           /* main background */
+  --st-surface      /* card/panel background */
+  --st-surface-2    /* slightly lighter surface */
+  --st-border       /* border color */
+  --st-text         /* primary text */
+  --st-text-muted   /* secondary text */
+  --st-accent       /* brand accent color (e.g. red or blue) */
+
+  Use hide-scrollbar utility class on horizontal scroll containers.
+
+  ---

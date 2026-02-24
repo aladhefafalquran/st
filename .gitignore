@@ -1,0 +1,18 @@
+node_modules
+dist
+build
+.turbo
+.env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.DS_Store
+
+# Prisma
+apps/server/prisma/migrations
+
+# Vite
+apps/client/dist
+
+# Railway / Cloudflare
+.wrangler

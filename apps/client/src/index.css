@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --color-st-bg: #0a0a0f;
+  --color-st-surface: #12121a;
+  --color-st-surface-2: #1a1a26;
+  --color-st-border: #ffffff14;
+  --color-st-text: #e8e8f0;
+  --color-st-text-muted: #8888aa;
+  --color-st-accent: #e50914;
+  --color-st-accent-hover: #f40612;
+}
+
+:root {
+  --st-bg: #0a0a0f;
+  --st-surface: #12121a;
+  --st-surface-2: #1a1a26;
+  --st-border: #ffffff14;
+  --st-text: #e8e8f0;
+  --st-text-muted: #8888aa;
+  --st-accent: #e50914;
+  --st-accent-hover: #f40612;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-st-bg);
+  color: var(--color-st-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1a1a26 25%, #252535 50%, #1a1a26 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.6s infinite linear;
+  border-radius: 6px;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: slide-up 0.25s ease-out forwards;
+}
