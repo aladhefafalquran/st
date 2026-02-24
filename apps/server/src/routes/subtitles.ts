@@ -15,6 +15,13 @@ const osHeaders = {
 const vttCache = new Map<string, string>()   // fileId → VTT content
 const linkCache = new Map<string, string>()  // fileId → download URL
 
+// Expose the API key so the client can call OpenSubtitles directly
+// (HF Space datacenter IPs are blocked by OS on download endpoints;
+//  the browser's IP is not blocked)
+router.get('/config', (_req, res) => {
+  res.json({ apiKey: env.OPENSUBTITLES_API_KEY })
+})
+
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {

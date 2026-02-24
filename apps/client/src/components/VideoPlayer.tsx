@@ -119,6 +119,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [subtitleError, setSubtitleError] = useState<string | null>(null)
 
   const watchStartRef = useRef<number>(Date.now())
+  const osApiKeyRef = useRef<string | null>(null)
 
   // ----- Fetch available streams -----
   useEffect(() => {
@@ -354,34 +355,41 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setActiveTrack(track)
     setSubtitleError(null)
     try {
-      // Step 1: server returns the direct download URL (uses OS API key, not quota for file fetch)
-      const linkRes = await api.get<{ url: string }>(`/api/subtitles/link/${track.fileId}`)
-      const fileUrl = linkRes.data.url
+      // Fetch the OS API key from our server once (key stays server-side, not baked into build)
+      if (!osApiKeyRef.current) {
+        const cfg = await api.get<{ apiKey: string }>('/api/subtitles/config')
+        osApiKeyRef.current = cfg.data.apiKey
+      }
+      const apiKey = osApiKeyRef.current
 
-      // Step 2: browser fetches the file directly from OpenSubtitles CDN using the user's IP
-      // (avoids datacenter IP blocks on HF Space)
-      const srtRes = await fetch(fileUrl)
-      if (!srtRes.ok) throw new Error(`CDN returned ${srtRes.status}`)
-      const text = await srtRes.text()
+      // Call OpenSubtitles directly from the browser (user's home IP — not blocked by OS)
+      // The HF Space datacenter IP is blocked on download endpoints, but the browser's IP is fine.
+      const OS_API = 'https://api.opensubtitles.com/api/v1'
+      const dlRes = await fetch(`${OS_API}/download`, {
+        method: 'POST',
+        headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'StreamTime v1.0' },
+        body: JSON.stringify({ file_id: parseInt(track.fileId) }),
+      })
+      if (!dlRes.ok) {
+        const errData = await dlRes.json().catch(() => ({}))
+        const msg = errData.message ?? errData.errors?.[0] ?? `OpenSubtitles error ${dlRes.status}`
+        throw new Error(msg)
+      }
+      const { link } = await dlRes.json()
 
-      let vtt = text
+      const fileRes = await fetch(link)
+      if (!fileRes.ok) throw new Error(`File download ${fileRes.status}`)
+      let text = await fileRes.text()
+
       if (!text.startsWith('WEBVTT')) {
-        vtt = 'WEBVTT\n\n' + text
+        text = 'WEBVTT\n\n' + text
           .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
           .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
       }
-      setCues(parseVtt(vtt))
+      setCues(parseVtt(text))
     } catch (err: any) {
-      let msg = 'Download failed'
-      const raw = err?.response?.data
-      if (typeof raw === 'string') {
-        try { msg = JSON.parse(raw)?.error ?? msg } catch { msg = raw.slice(0, 120) }
-      } else if (raw?.error) {
-        msg = raw.error
-      } else if (err?.message) {
-        msg = err.message
-      }
-      console.error('[subtitle download]', err?.response?.status ?? '', msg)
+      const msg = err?.message ?? 'Download failed'
+      console.error('[subtitle]', msg)
       setSubtitleError(msg)
       setCues([])
     }
