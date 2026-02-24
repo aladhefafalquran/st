@@ -15,29 +15,39 @@ const osHeaders = {
 const subtitleCache = new Map<string, string>()
 
 router.get('/search', async (req, res) => {
-  const { imdb_id, type, languages } = req.query as Record<string, string>
+  const { imdb_id, type, languages, season, episode } = req.query as Record<string, string>
   if (!imdb_id) {
     res.status(400).json({ error: 'Missing imdb_id' })
     return
   }
 
-  const params = new URLSearchParams()
-  params.set('imdb_id', imdb_id.replace(/^tt/, ''))
-  if (type === 'tv') params.set('type', 'episode')
-  else params.set('type', 'movie')
-  if (languages) params.set('languages', languages)
+  try {
+    const params = new URLSearchParams()
+    params.set('imdb_id', imdb_id.replace(/^tt/, ''))
+    if (type === 'tv') {
+      params.set('type', 'episode')
+      if (season) params.set('season_number', season)
+      if (episode) params.set('episode_number', episode)
+    } else {
+      params.set('type', 'movie')
+    }
+    if (languages) params.set('languages', languages)
 
-  const response = await axios.get(`${OS_API}/subtitles?${params}`, { headers: osHeaders })
-  const results: SubtitleTrack[] = (response.data.data || [])
-    .filter((item: any) => item.attributes?.files?.length > 0)
-    .map((item: any) => ({
-      fileId: String(item.attributes.files[0].file_id),
-      language: item.attributes.language,
-      languageName: item.attributes.language,
-      releaseName: item.attributes.release || '',
-    }))
+    const response = await axios.get(`${OS_API}/subtitles?${params}`, { headers: osHeaders })
+    const results: SubtitleTrack[] = (response.data.data || [])
+      .filter((item: any) => item.attributes?.files?.length > 0)
+      .map((item: any) => ({
+        fileId: String(item.attributes.files[0].file_id),
+        language: item.attributes.language,
+        languageName: item.attributes.language,
+        releaseName: item.attributes.release || item.attributes.files[0].file_name || '',
+      }))
 
-  res.json(results)
+    res.json(results)
+  } catch (err: any) {
+    console.error('[subtitles] search error:', err?.response?.status, err?.response?.data ?? err?.message)
+    res.json([]) // return empty array so client shows "No subtitles found" rather than crashing
+  }
 })
 
 router.get('/download/:fileId', async (req, res) => {
@@ -49,23 +59,28 @@ router.get('/download/:fileId', async (req, res) => {
     return
   }
 
-  const downloadRes = await axios.post(
-    `${OS_API}/download`,
-    { file_id: parseInt(fileId) },
-    { headers: osHeaders }
-  )
+  try {
+    const downloadRes = await axios.post(
+      `${OS_API}/download`,
+      { file_id: parseInt(fileId) },
+      { headers: osHeaders }
+    )
 
-  const fileUrl: string = downloadRes.data.link
-  const fileRes = await axios.get(fileUrl, { responseType: 'text' })
-  let content: string = fileRes.data
+    const fileUrl: string = downloadRes.data.link
+    const fileRes = await axios.get(fileUrl, { responseType: 'text' })
+    let content: string = fileRes.data
 
-  if (!content.startsWith('WEBVTT')) {
-    content = srtToVtt(content)
+    if (!content.startsWith('WEBVTT')) {
+      content = srtToVtt(content)
+    }
+
+    subtitleCache.set(fileId, content)
+    res.setHeader('Content-Type', 'text/vtt')
+    res.send(content)
+  } catch (err: any) {
+    console.error('[subtitles] download error:', err?.response?.status, err?.response?.data ?? err?.message)
+    res.status(500).json({ error: 'Failed to download subtitle' })
   }
-
-  subtitleCache.set(fileId, content)
-  res.setHeader('Content-Type', 'text/vtt')
-  res.send(content)
 })
 
 function srtToVtt(srt: string): string {

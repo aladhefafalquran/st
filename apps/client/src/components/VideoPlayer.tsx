@@ -317,14 +317,16 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setSubLang(lang); setSubtitleLoading(true)
     setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null)
     try {
-      const r = await api.get('/api/subtitles/search', {
-        params: { imdb_id: imdbId, type: mediaType, languages: lang },
-      })
+      const params: Record<string, string | number> = { imdb_id: imdbId, type: mediaType, languages: lang }
+      if (mediaType === 'tv' && season) params.season = season
+      if (mediaType === 'tv' && episode) params.episode = episode
+      const r = await api.get('/api/subtitles/search', { params })
       const list: SubtitleTrack[] = r.data
       setTracks(list)
-      if (list.length > 0) await selectSubtitleTrack(list[0])
+    } catch {
+      setTracks([])
     } finally { setSubtitleLoading(false) }
-  }, [imdbId, mediaType])
+  }, [imdbId, mediaType, season, episode])
 
   async function selectSubtitleTrack(track: SubtitleTrack | null) {
     if (!track) { setActiveTrack(null); setCues([]); setActiveCue(null); return }
