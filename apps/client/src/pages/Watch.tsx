@@ -29,7 +29,7 @@ export function Watch() {
 
   // Fetch show data for TV + save continue watching once poster is known
   useEffect(() => {
-    if (mediaType !== 'tv' || !tmdbId || !title || !season || !episode) return
+    if (mediaType !== 'tv' || !tmdbId || !title || !imdbId || !season || !episode) return
     api.get<TMDBTVShow>(`/api/tmdb/tv/${tmdbId}`).then((r) => {
       setShow(r.data)
       saveContinueWatching({ mediaType: 'tv', tmdbId, title, posterPath: r.data.poster_path, imdbId, season, episode })
