@@ -1,13 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
-import { Pool, neonConfig } from '@neondatabase/serverless'
+import { Pool } from '@neondatabase/serverless'
 
-// Use built-in WebSocket in Node 22+ (tablet has Node 25)
-if (typeof globalThis.WebSocket === 'undefined') {
-  const { default: ws } = await import('ws')
-  neonConfig.webSocketConstructor = ws
-}
-
+// Node 21+ has built-in WebSocket; @neondatabase/serverless uses it automatically
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaNeon(pool)
 
