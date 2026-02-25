@@ -84,9 +84,12 @@ export const onRequestGet = async ({ request }: { request: Request }) => {
     const matchIdx = ids
       .map((_, i) => langs[i]?.toLowerCase() === lang3.toLowerCase() ? i : -1)
       .filter(i => i >= 0)
-    const finalIdx = matchIdx.length > 0 ? matchIdx : ids.map((_, i) => i)
 
-    const results = finalIdx.slice(0, 20).map(i => ({
+    // No fallback — if the requested language isn't found return empty so the
+    // UI shows "No subtitles found" instead of silently showing wrong-language results.
+    if (matchIdx.length === 0) return Response.json([])
+
+    const results = matchIdx.slice(0, 20).map(i => ({
       fileId:       ids[i],
       language:     langs[i] ?? lang3,
       languageName: languages,

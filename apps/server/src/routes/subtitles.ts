@@ -3,59 +3,81 @@ import axios from 'axios'
 import { gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
 import type { SubtitleTrack } from '@streamtime/shared'
-import { env } from '../env.js'
 
 const gunzipAsync = promisify(gunzip)
 const router: Router = Router()
 
-const OS_BASE    = 'https://api.opensubtitles.com/api/v1'
 const XMLRPC_URL = 'https://api.opensubtitles.org/xml-rpc'
 const UA = 'StreamTime v1.0'
 
-// ── Search via REST API ───────────────────────────────────────────────────────
+router.get('/config', (_req, res) => res.json({ provider: 'xmlrpc' }))
 
-router.get('/config', (_req, res) => res.json({ provider: 'rest+xmlrpc' }))
+// ISO 639-1 → ISO 639-2 (XML-RPC uses 3-letter codes)
+const LANG_MAP: Record<string, string> = {
+  en: 'eng', ar: 'ara', fr: 'fre', es: 'spa',
+  de: 'ger', tr: 'tur', zh: 'chi', ja: 'jpn',
+}
+
+function extractField(xml: string, field: string): string[] {
+  const results: string[] = []
+  const memberRe = /<member>([\s\S]*?)<\/member>/g
+  let m: RegExpExecArray | null
+  while ((m = memberRe.exec(xml)) !== null) {
+    const block = m[0]
+    if (block.includes(`<name>${field}</name>`)) {
+      const val = block.match(/<string>([^<]*)<\/string>/)
+      if (val?.[1] !== undefined) results.push(val[1].trim())
+    }
+  }
+  return results
+}
 
 router.get('/search', async (req, res) => {
   const { imdb_id, type, languages, season, episode } = req.query as Record<string, string>
   if (!imdb_id) { res.status(400).json({ error: 'Missing imdb_id' }); return }
 
-  if (!env.OPENSUBTITLES_API_KEY) {
-    console.warn('[subtitles/search] OPENSUBTITLES_API_KEY not set')
-    res.json([])
-    return
-  }
-
   try {
-    const params = new URLSearchParams()
-    params.set('imdb_id', imdb_id.replace(/^tt/, ''))
-    if (type === 'tv') {
-      params.set('type', 'episode')
-      if (season)  params.set('season_number', season)
-      if (episode) params.set('episode_number', episode)
-    } else {
-      params.set('type', 'movie')
+    const tok = await getXmlToken()
+    const lang3  = LANG_MAP[languages] ?? 'eng'
+    const pureId = imdb_id.replace(/^tt/, '').padStart(7, '0')
+
+    let struct =
+      `<member><name>sublanguageid</name><value><string>all</string></value></member>` +
+      `<member><name>imdbid</name><value><string>${pureId}</string></value></member>`
+    if (type === 'tv' && season)  struct += `<member><name>season</name><value><int>${season}</int></value></member>`
+    if (type === 'tv' && episode) struct += `<member><name>episode</name><value><int>${episode}</int></value></member>`
+
+    const params =
+      `<param><value><string>${tok}</string></value></param>` +
+      `<param><value><array><data><value><struct>${struct}</struct></value></data></array></value></param>`
+
+    const resp = await xmlCall('SearchSubtitles', params)
+
+    if (resp.includes('No results found') || !resp.includes('IDSubtitleFile')) {
+      res.json([]); return
     }
-    params.set('languages', languages ?? 'en')
 
-    const resp = await axios.get(`${OS_BASE}/subtitles?${params}`, {
-      headers: { 'Api-Key': env.OPENSUBTITLES_API_KEY, 'Content-Type': 'application/json', 'User-Agent': UA },
-      timeout: 10000,
-    })
+    const ids   = extractField(resp, 'IDSubtitleFile')
+    const names = extractField(resp, 'MovieReleaseName')
+    const langs = extractField(resp, 'SubLanguageID')
 
-    const results: SubtitleTrack[] = (resp.data.data ?? [])
-      .filter((item: any) => item.attributes?.files?.length > 0)
-      .map((item: any) => ({
-        fileId:       String(item.attributes.files[0].file_id),
-        language:     item.attributes.language,
-        languageName: item.attributes.language,
-        releaseName:  item.attributes.release || item.attributes.files[0].file_name || '',
-      }))
+    const matchIdx = ids
+      .map((_, i) => langs[i]?.toLowerCase() === lang3.toLowerCase() ? i : -1)
+      .filter(i => i >= 0)
 
-    console.log(`[subtitles/search] ${results.length} results for ${imdb_id} (${languages})`)
+    if (matchIdx.length === 0) { res.json([]); return }
+
+    const results: SubtitleTrack[] = matchIdx.slice(0, 20).map(i => ({
+      fileId:       ids[i],
+      language:     langs[i] ?? lang3,
+      languageName: languages ?? lang3,
+      releaseName:  names[i] ?? ids[i],
+    }))
+
+    console.log(`[subtitles/search] ${ids.length} total, ${matchIdx.length} in ${lang3}`)
     res.json(results)
   } catch (err: any) {
-    console.error('[subtitles/search]', err?.response?.status, err?.message)
+    console.error('[subtitles/search]', err?.message)
     res.json([])
   }
 })
