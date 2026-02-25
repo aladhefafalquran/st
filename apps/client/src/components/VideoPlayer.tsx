@@ -429,47 +429,18 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setActiveTrack(track)
     setSubtitleError(null)
     try {
-      let vttText: string | null = null
-
-      // Try direct download: get link from OS API, then fetch the SRT file
-      if (OS_HEADERS) {
-        try {
-          const linkR = await fetch('https://api.opensubtitles.com/api/v1/download', {
-            method: 'POST',
-            headers: OS_HEADERS,
-            body: JSON.stringify({ file_id: parseInt(track.fileId) }),
-          })
-          if (linkR.ok) {
-            const { link } = await linkR.json() as { link: string }
-            const fileR = await fetch(link)
-            if (fileR.ok) {
-              let text = await fileR.text()
-              if (!text.startsWith('WEBVTT')) {
-                text = 'WEBVTT\n\n' + text
-                  .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-                  .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
-              }
-              vttText = text
-            }
-          }
-        } catch { /* CORS on the CDN file — fall through to proxy */ }
+      // Always proxy through CF Function / server — OS REST /download requires
+      // user JWT auth (not just API key), so we can't call it from the browser.
+      // CF Function and server both use XML-RPC which works anonymously.
+      const r = await fetch(`/api/subtitles/download/${track.fileId}`)
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as any
+        throw new Error(err?.error ?? `HTTP ${r.status}`)
       }
-
-      // Fall back to server/CF Function proxy
-      if (!vttText) {
-        const r = await fetch(`/api/subtitles/download/${track.fileId}`)
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({})) as any
-          throw new Error(err?.error ?? `HTTP ${r.status}`)
-        }
-        vttText = await r.text()
-      }
-
-      setCues(parseVtt(vttText))
+      setCues(parseVtt(await r.text()))
     } catch (err: any) {
-      const msg = err?.message ?? 'Download failed'
-      console.error('[subtitle]', msg)
-      setSubtitleError(msg)
+      console.error('[subtitle]', err?.message)
+      setSubtitleError(err?.message ?? 'Download failed')
       setCues([])
     }
   }
