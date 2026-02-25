@@ -4,6 +4,13 @@ import { useAuthStore } from '../store/authStore'
 import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shared'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
+
+// Injected at build time by vite.config.ts — the OpenSubtitles API key.
+// Using declare so TypeScript doesn't complain; Vite replaces __OS_KEY__ with the literal string.
+declare const __OS_KEY__: string
+const OS_KEY: string = (typeof __OS_KEY__ !== 'undefined' ? __OS_KEY__ : '') || ''
+
+const OS_HEADERS = OS_KEY ? { 'Api-Key': OS_KEY, 'Content-Type': 'application/json' } : null
 const PRELOAD_TIMEOUT    = 30           // absolute max wait (seconds)
 const NO_PEERS_TIMEOUT   = 10           // skip if zero peers after this long
 const SLOW_SPEED_TIMEOUT = 15           // skip if peers>0 but speed too low
@@ -360,24 +367,60 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     else (containerRef.current ?? videoRef.current)?.requestFullscreen?.()
   }
 
+  // Direct call to OpenSubtitles API — used when __OS_KEY__ is embedded at build time
+  async function searchDirect(lang: string): Promise<SubtitleTrack[]> {
+    const p = new URLSearchParams({ languages: lang })
+    p.set('imdb_id', imdbId.replace(/^tt/, ''))
+    if (mediaType === 'tv') {
+      p.set('type', 'episode')
+      if (season)  p.set('season_number',  String(season))
+      if (episode) p.set('episode_number', String(episode))
+    } else {
+      p.set('type', 'movie')
+    }
+    const r = await fetch(`https://api.opensubtitles.com/api/v1/subtitles?${p}`, { headers: OS_HEADERS! })
+    if (!r.ok) throw new Error(`OS ${r.status}`)
+    const data = await r.json()
+    return (data.data ?? [])
+      .filter((item: any) => item.attributes?.files?.length > 0)
+      .map((item: any) => ({
+        fileId:       String(item.attributes.files[0].file_id),
+        language:     item.attributes.language,
+        languageName: item.attributes.language,
+        releaseName:  item.attributes.release || item.attributes.files[0].file_name || '',
+      }))
+  }
+
+  // Proxy call through CF Functions / server — fallback when direct call unavailable
+  async function searchProxy(lang: string): Promise<SubtitleTrack[]> {
+    const p = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
+    if (mediaType === 'tv' && season)  p.set('season',  String(season))
+    if (mediaType === 'tv' && episode) p.set('episode', String(episode))
+    const r = await fetch(`/api/subtitles/search?${p}`)
+    const body = await r.json().catch(() => [])
+    if (!r.ok) throw new Error((body as any)?.error ?? `Search ${r.status}`)
+    return body as SubtitleTrack[]
+  }
+
   const fetchSubtitles = useCallback(async (lang: string) => {
     setSubLang(lang); setSubtitleLoading(true)
     setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null)
     try {
-      // Relative URL → CF Pages Function in prod, Vite proxy → local server in dev
-      const params = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
-      if (mediaType === 'tv' && season)  params.set('season',  String(season))
-      if (mediaType === 'tv' && episode) params.set('episode', String(episode))
-      const r = await fetch(`/api/subtitles/search?${params}`)
-      const body = await r.json()
-      if (!r.ok) {
-        setSubtitleError((body as any)?.error ?? `Search failed (${r.status})`)
-        setSubView('tracks')
-        return
+      let list: SubtitleTrack[]
+      if (OS_HEADERS) {
+        try {
+          list = await searchDirect(lang)
+        } catch {
+          // CORS or API error — fall back to proxy
+          list = await searchProxy(lang)
+        }
+      } else {
+        list = await searchProxy(lang)
       }
-      setTracks(body as SubtitleTrack[])
-    } catch {
-      setTracks([])
+      setTracks(list)
+    } catch (err: any) {
+      setSubtitleError(err?.message ?? 'Search failed')
+      setSubView('tracks')
     } finally { setSubtitleLoading(false) }
   }, [imdbId, mediaType, season, episode])
 
@@ -386,14 +429,43 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setActiveTrack(track)
     setSubtitleError(null)
     try {
-      // Relative URL → CF Pages Function in prod, Vite proxy → local server in dev
-      const r = await fetch(`/api/subtitles/download/${track.fileId}`)
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({})) as any
-        throw new Error(err?.error ?? `HTTP ${r.status}`)
+      let vttText: string | null = null
+
+      // Try direct download: get link from OS API, then fetch the SRT file
+      if (OS_HEADERS) {
+        try {
+          const linkR = await fetch('https://api.opensubtitles.com/api/v1/download', {
+            method: 'POST',
+            headers: OS_HEADERS,
+            body: JSON.stringify({ file_id: parseInt(track.fileId) }),
+          })
+          if (linkR.ok) {
+            const { link } = await linkR.json() as { link: string }
+            const fileR = await fetch(link)
+            if (fileR.ok) {
+              let text = await fileR.text()
+              if (!text.startsWith('WEBVTT')) {
+                text = 'WEBVTT\n\n' + text
+                  .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+                  .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+              }
+              vttText = text
+            }
+          }
+        } catch { /* CORS on the CDN file — fall through to proxy */ }
       }
-      const text = await r.text()
-      setCues(parseVtt(text))
+
+      // Fall back to server/CF Function proxy
+      if (!vttText) {
+        const r = await fetch(`/api/subtitles/download/${track.fileId}`)
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({})) as any
+          throw new Error(err?.error ?? `HTTP ${r.status}`)
+        }
+        vttText = await r.text()
+      }
+
+      setCues(parseVtt(vttText))
     } catch (err: any) {
       const msg = err?.message ?? 'Download failed'
       console.error('[subtitle]', msg)
