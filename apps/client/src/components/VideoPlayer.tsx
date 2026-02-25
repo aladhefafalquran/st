@@ -163,7 +163,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode 
           key={src}
           src={src}
           className="w-full h-full border-0"
-          allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
           referrerPolicy="no-referrer"
