@@ -10,6 +10,8 @@
     "db:generate": "prisma generate"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "@prisma/adapter-neon": "^6.1.0",
     "@prisma/client": "^6.1.0",
     "@streamtime/shared": "workspace:*",
     "axios": "^1.7.9",
