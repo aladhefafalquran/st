@@ -4,6 +4,35 @@ import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shar
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
 
+// ISO 639-1 → ISO 639-2 (OpenSubtitles VLC REST uses 3-letter codes)
+const LANG3: Record<string, string> = {
+  en: 'eng', ar: 'ara', fr: 'fre', es: 'spa',
+  de: 'ger', tr: 'tur', zh: 'chi', ja: 'jpn',
+}
+
+// TextDecoder label for each OpenSubtitles encoding string
+function decoderLabel(enc: string | undefined): string {
+  if (!enc) return 'utf-8'
+  const u = enc.toUpperCase()
+  if (u === 'UTF-8' || u === 'UTF8') return 'utf-8'
+  if (u === 'UTF-16' || u === 'UTF16') return 'utf-16'
+  if (u.startsWith('CP') || u.startsWith('WINDOWS')) return `windows-${u.replace(/^(CP|WINDOWS-?)/, '')}`
+  if (u === 'LATIN-1' || u === 'ISO-8859-1') return 'iso-8859-1'
+  return 'utf-8'
+}
+
+// Build VLC REST API search URL (path segments must be alphabetically sorted)
+function vlcSearchUrl(imdbId: string, lang: string, season?: number, episode?: number): string {
+  const base = 'https://rest.opensubtitles.org/search'
+  const pureId = imdbId.replace(/^tt/, '').padStart(7, '0')
+  const lang3 = LANG3[lang] ?? 'eng'
+  if (season && episode) {
+    // TV: sorted: episode-E / imdbid-ID / season-S / sublanguageid-LANG
+    return `${base}/episode-${episode}/imdbid-${pureId}/season-${season}/sublanguageid-${lang3}`
+  }
+  return `${base}/imdbid-${pureId}/sublanguageid-${lang3}`
+}
+
 const QUALITY_ORDER: Record<string, number> = { '2160p': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 }
 
 const QUALITY_BADGE: Record<string, string> = {
@@ -258,22 +287,30 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     doStartStream(streams, next)
   }
 
-  // ── Subtitles ─────────────────────────────────────────────────────────────
+  // ── Subtitles — direct client-side calls (CORS open, no server proxy) ────
   const fetchSubs = useCallback(async (lang: string) => {
     setSubLang(lang); setSubtitleLoading(true)
     setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null)
     try {
-      const p = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
-      if (mediaType === 'tv' && season)  p.set('season',  String(season))
-      if (mediaType === 'tv' && episode) p.set('episode', String(episode))
-      const url = `${API_BASE}/api/subtitles/search?${p}`
+      if (!imdbId) throw new Error('No IMDB ID available for subtitle search')
+      const url = vlcSearchUrl(imdbId, lang,
+        mediaType === 'tv' && season  ? season  : undefined,
+        mediaType === 'tv' && episode ? episode : undefined)
       console.log('[subtitle] GET', url)
-      console.log('[subtitle] params →', { imdb_id: imdbId, type: mediaType, languages: lang, season, episode })
-      const r = await fetch(url)
-      const body = await r.json().catch(() => [])
-      console.log('[subtitle] response status:', r.status, '| body:', body)
-      if (!r.ok) throw new Error((body as any)?.error ?? `Search ${r.status}`)
-      setTracks(body as SubtitleTrack[])
+      const r = await fetch(url, { headers: { 'X-User-Agent': 'VLSub 0.10.2' } })
+      if (!r.ok) throw new Error(`Search ${r.status}`)
+      const data: any[] = await r.json()
+      console.log('[subtitle] results:', data.length)
+      const tracks: SubtitleTrack[] = data.slice(0, 20).map(s => ({
+        fileId:       s.IDSubtitleFile,
+        language:     s.SubLanguageID,
+        languageName: lang,
+        releaseName:  s.MovieReleaseName || s.IDSubtitleFile,
+        downloadUrl:  s.SubDownloadLink,
+        encoding:     s.SubEncoding,
+      }))
+      if (tracks.length === 0) throw new Error('No subtitles found for this language')
+      setTracks(tracks)
     } catch (e: any) {
       console.error('[subtitle] search error:', e?.message)
       setSubtitleError(e?.message ?? 'Search failed'); setSubView('tracks')
@@ -284,9 +321,26 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     if (!t) { setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null); return }
     setActiveTrack(t); setSubtitleError(null)
     try {
-      const r = await fetch(`${API_BASE}/api/subtitles/download/${t.fileId}`)
-      if (!r.ok) { const e = await r.json().catch(() => ({})) as any; throw new Error(e?.error ?? `HTTP ${r.status}`) }
-      setCues(parseVtt(await r.text()))
+      const dlUrl = t.downloadUrl
+      if (!dlUrl) throw new Error('No download URL for this subtitle')
+      // Fetch .gz file directly from OpenSubtitles CDN (no auth needed)
+      const r = await fetch(dlUrl)
+      if (!r.ok) throw new Error(`Download failed: HTTP ${r.status}`)
+      // Decompress gzip in-browser using Streams API
+      const ds = new DecompressionStream('gzip')
+      const writer = ds.writable.getWriter()
+      const buf = await r.arrayBuffer()
+      await writer.write(new Uint8Array(buf))
+      await writer.close()
+      const srtBytes = await new Response(ds.readable).arrayBuffer()
+      // Decode with correct encoding (Arabic subtitles are often CP1256)
+      const srt = new TextDecoder(decoderLabel(t.encoding)).decode(srtBytes)
+      // Strip HTML tags from SRT content, convert SRT → VTT
+      const vtt = 'WEBVTT\n\n' + srt
+        .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2')
+        .replace(/<font[^>]*>/gi, '').replace(/<\/font>/gi, '')
+      setCues(parseVtt(vtt))
       setSubsOpen(false)
     } catch (e: any) { setSubtitleError(e?.message ?? 'Download failed'); setCues([]) }
   }
