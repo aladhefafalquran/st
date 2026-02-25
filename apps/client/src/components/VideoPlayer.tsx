@@ -290,6 +290,20 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     }
   }, [streamUrl])
 
+  // ----- Auto-skip if video is mounted but never starts playing (e.g. unsupported codec) -----
+  useEffect(() => {
+    if (!streamUrl || videoCanPlay) return
+    const t = setTimeout(() => {
+      // Still not playing after 12s — try next source
+      setStreamIndex((prev) => {
+        const next = prev + 1
+        setStreams((s) => { startStream(s, next); return s })
+        return next
+      })
+    }, 12000)
+    return () => clearTimeout(t)
+  }, [streamUrl, videoCanPlay])
+
   // ----- Watch history -----
   useEffect(() => { watchStartRef.current = Date.now() }, [tmdbId, season, episode])
 
@@ -355,8 +369,13 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       if (mediaType === 'tv' && season)  params.set('season',  String(season))
       if (mediaType === 'tv' && episode) params.set('episode', String(episode))
       const r = await fetch(`/api/subtitles/search?${params}`)
-      const list: SubtitleTrack[] = await r.json()
-      setTracks(list)
+      const body = await r.json()
+      if (!r.ok) {
+        setSubtitleError((body as any)?.error ?? `Search failed (${r.status})`)
+        setSubView('tracks')
+        return
+      }
+      setTracks(body as SubtitleTrack[])
     } catch {
       setTracks([])
     } finally { setSubtitleLoading(false) }
