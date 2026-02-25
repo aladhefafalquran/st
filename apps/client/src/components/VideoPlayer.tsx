@@ -96,7 +96,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [preloadBytes, setPreloadBytes] = useState(0)
   const [preloadTotal, setPreloadTotal] = useState(5 * 1024 * 1024)
   const [streamError, setStreamError]   = useState<string | null>(null)
-  const [waitSeconds, setWaitSeconds]   = useState(0)
   const waitRef    = useRef(0)
   const peersRef   = useRef(0)
   const speedRef   = useRef(0)
@@ -132,7 +131,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setStreamUrl(null); streamUrlRef.current = null
     setStreamPhase('waiting')
     setStreamError(null)
-    setWaitSeconds(0); waitRef.current = 0
+    waitRef.current = 0
     setVideoCanPlay(false); setErrCount(0)
     setQualityFilter('all')
 
@@ -166,7 +165,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setStreamPhase('waiting')
     setPeers(0); setDownloadSpeed(0); setPreloadBytes(0)
     setStreamError(null)
-    setWaitSeconds(0); waitRef.current = 0
+    waitRef.current = 0
     setVideoCanPlay(false); setErrCount(0)
     peersRef.current = 0; speedRef.current = 0
     // Prewarm this + next 2
@@ -179,10 +178,9 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   // ── Timeout auto-skip ─────────────────────────────────────────────────────
   useEffect(() => {
     if (streamUrl || streamError || streamsLoading) return
-    waitRef.current = 0; setWaitSeconds(0)
+    waitRef.current = 0
     const iv = setInterval(() => {
       waitRef.current++
-      setWaitSeconds(waitRef.current)
       const t = waitRef.current, p = peersRef.current, sp = speedRef.current
       const skip = t >= PRELOAD_TIMEOUT
         || (t >= NO_PEERS_TIMEOUT && p === 0)
@@ -375,12 +373,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                     <div className="h-full bg-[var(--st-accent)] transition-all duration-500" style={{ width: `${preloadPct}%` }} />
                   </div>
                 )}
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="text-white/30 text-xs">{waitSeconds}s</span>
-                  {streams.length > 1 && activeIdx < streams.length - 1 && (
-                    <button onClick={tryNext} className="text-xs text-white/60 hover:text-white underline cursor-pointer">Try next source</button>
-                  )}
-                </div>
               </>
             )}
           </div>
@@ -541,7 +533,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                 {/* Status */}
                 {isActive && (
                   <span className={`shrink-0 text-[11px] font-medium ${videoCanPlay ? 'text-green-400' : streamUrl ? 'text-yellow-400' : 'text-white/50'}`}>
-                    {videoCanPlay ? '● Playing' : streamUrl ? '● Ready' : streamError ? '✕' : `${waitSeconds}s`}
+                    {videoCanPlay ? '● Playing' : streamUrl ? '● Ready' : streamError ? '✕' : '…'}
                   </span>
                 )}
               </button>
