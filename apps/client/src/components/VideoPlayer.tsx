@@ -9,6 +9,8 @@ const NO_PEERS_TIMEOUT   = 10           // skip if zero peers after this long
 const SLOW_SPEED_TIMEOUT = 15           // skip if peers>0 but speed too low
 const SLOW_SPEED_THRESHOLD = 200 * 1024 // 200 KB/s
 
+const QUALITY_ORDER: Record<string, number> = { '2160p': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 }
+
 const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'ar', label: 'Arabic' },
@@ -86,6 +88,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [preloadBytes, setPreloadBytes] = useState(0)
   const [preloadTotal, setPreloadTotal] = useState(5 * 1024 * 1024)
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [selectedQuality, setSelectedQuality] = useState<string | null>(null)
   const [waitSeconds, setWaitSeconds] = useState(0)
   const waitSecondsRef = useRef(0)
   const peersRef = useRef(0)
@@ -128,6 +131,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     streamUrlRef.current = null
     setStreamPhase('waiting')
     setStreamError(null)
+    setSelectedQuality(null)
     setStreamIndex(0)
     setWaitSeconds(0)
     waitSecondsRef.current = 0
@@ -140,12 +144,21 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
     api.get<{ torrents: TorrentOption[] }>('/api/stream/torrents', { params })
       .then((r) => {
-        setStreams(r.data.torrents)
-        if (r.data.torrents.length > 0) {
-          startStream(r.data.torrents, 0)
-        } else {
-          setStreamError('No streams found.')
+        const torrents = r.data.torrents
+        if (torrents.length === 0) { setStreams([]); setStreamError('No streams found.'); return }
+        // Sort: within each quality tier, highest seeds first
+        const sorted = [...torrents].sort((a, b) => {
+          const qd = (QUALITY_ORDER[b.quality] ?? 0) - (QUALITY_ORDER[a.quality] ?? 0)
+          return qd !== 0 ? qd : b.seeds - a.seeds
+        })
+        setStreams(sorted)
+        const qualities = [...new Set(sorted.map((t) => t.quality))]
+        if (qualities.length === 1) {
+          // Only one quality — skip picker, start immediately
+          setSelectedQuality(qualities[0])
+          startStream(sorted, 0)
         }
+        // else: quality picker overlay is shown (selectedQuality stays null)
       })
       .catch(() => setStreamError('Failed to fetch streams.'))
       .finally(() => setStreamsLoading(false))
@@ -178,7 +191,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
 
   // ----- Wait-time counter (shows elapsed seconds while loading) -----
   useEffect(() => {
-    if (streamUrl || streamError || streamsLoading) return
+    if (streamUrl || streamError || streamsLoading || !selectedQuality) return
     waitSecondsRef.current = 0
     setWaitSeconds(0)
     const iv = setInterval(() => {
@@ -201,7 +214,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       }
     }, 1000)
     return () => clearInterval(iv)
-  }, [selectedStream, streamUrl, streamError, streamsLoading])
+  }, [selectedStream, streamUrl, streamError, streamsLoading, selectedQuality])
 
   // ----- Poll status until preload is done -----
   useEffect(() => {
@@ -380,6 +393,17 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     startStream(streams, next)
   }
 
+  function pickQuality(quality: string) {
+    setSelectedQuality(quality)
+    // Put chosen quality first (sorted by seeds desc), then the rest
+    const preferred = streams.filter((s) => s.quality === quality).sort((a, b) => b.seeds - a.seeds)
+    const rest = streams.filter((s) => s.quality !== quality).sort((a, b) => b.seeds - a.seeds)
+    const ordered = [...preferred, ...rest]
+    setStreams(ordered)
+    setStreamIndex(0)
+    startStream(ordered, 0)
+  }
+
   // Retry same stream (e.g. after a transient video error)
   function retryCurrentStream() {
     if (!selectedStream) return
@@ -468,6 +492,36 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                   <div className="w-10 h-10 border-3 border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
                   <p className="text-white/70 text-sm">Finding streams…</p>
                 </>
+              ) : !selectedQuality ? (
+                // ── Quality picker ──
+                <div className="flex flex-col items-center gap-5 px-4 text-center w-full max-w-sm">
+                  <div>
+                    <p className="text-white font-semibold text-base">{title}</p>
+                    {mediaType === 'tv' && season && episode && (
+                      <p className="text-white/50 text-xs mt-0.5">S{season} E{episode}</p>
+                    )}
+                  </div>
+                  <p className="text-white/60 text-sm">Select quality</p>
+                  <div className="flex flex-wrap gap-3 justify-center w-full">
+                    {[...new Map(streams.map((s) => [s.quality, s])).entries()]
+                      .sort(([a], [b]) => (QUALITY_ORDER[b] ?? 0) - (QUALITY_ORDER[a] ?? 0))
+                      .map(([quality]) => {
+                        const group = streams.filter((s) => s.quality === quality)
+                        const maxSeeds = Math.max(...group.map((s) => s.seeds))
+                        return (
+                          <button
+                            key={quality}
+                            onClick={() => pickQuality(quality)}
+                            className="flex flex-col items-center gap-1 px-5 py-3 bg-white/10 hover:bg-[var(--st-accent)]/80 border border-white/20 hover:border-[var(--st-accent)] rounded-xl cursor-pointer transition-colors min-w-[88px]"
+                          >
+                            <span className="text-white font-bold text-base">{quality}</span>
+                            <span className="text-white/50 text-xs">{group.length} source{group.length !== 1 ? 's' : ''}</span>
+                            {maxSeeds > 0 && <span className="text-white/40 text-xs">↑ {maxSeeds} seeds</span>}
+                          </button>
+                        )
+                      })}
+                  </div>
+                </div>
               ) : (
                 <>
                   <div className="w-10 h-10 border-[3px] border-white/20 border-t-[var(--st-accent)] rounded-full animate-spin" />
@@ -571,7 +625,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
                         {streams.map((s, i) => (
                           <button
                             key={s.hash}
-                            onClick={(e) => { e.stopPropagation(); setStreamIndex(i); startStream(streams, i); setShowQualityPicker(false) }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedQuality(s.quality); setStreamIndex(i); startStream(streams, i); setShowQualityPicker(false) }}
                             className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/10 cursor-pointer ${i === streamIndex ? 'text-[var(--st-accent)]' : 'text-white'}`}
                           >
                             {s.quality} · {s.size}

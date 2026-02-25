@@ -29,12 +29,14 @@ interface TorrentioStream {
   behaviorHints?: { videoSize?: number; bingeGroup?: string; filename?: string }
 }
 
-const QUALITY_ORDER: Record<string, number> = {
-  '2160p': 5,
-  '1080p': 4,
-  '720p': 3,
-  '480p': 2,
-  '360p': 1,
+// Score = seeds + qualityBonus so that a well-seeded lower-res source beats
+// a barely-seeded higher-res one (e.g. 9-seed 1080p > 2-seed 2160p).
+const QUALITY_BONUS: Record<string, number> = {
+  '2160p': 8,
+  '1080p': 5,
+  '720p':  2,
+  '480p':  0,
+  '360p':  0,
 }
 
 function parseQuality(name: string): string {
