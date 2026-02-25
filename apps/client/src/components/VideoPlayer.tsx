@@ -266,11 +266,16 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       const p = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
       if (mediaType === 'tv' && season)  p.set('season',  String(season))
       if (mediaType === 'tv' && episode) p.set('episode', String(episode))
-      const r = await fetch(`${API_BASE}/api/subtitles/search?${p}`)
+      const url = `${API_BASE}/api/subtitles/search?${p}`
+      console.log('[subtitle] GET', url)
+      console.log('[subtitle] params →', { imdb_id: imdbId, type: mediaType, languages: lang, season, episode })
+      const r = await fetch(url)
       const body = await r.json().catch(() => [])
+      console.log('[subtitle] response status:', r.status, '| body:', body)
       if (!r.ok) throw new Error((body as any)?.error ?? `Search ${r.status}`)
       setTracks(body as SubtitleTrack[])
     } catch (e: any) {
+      console.error('[subtitle] search error:', e?.message)
       setSubtitleError(e?.message ?? 'Search failed'); setSubView('tracks')
     } finally { setSubtitleLoading(false) }
   }, [imdbId, mediaType, season, episode])
