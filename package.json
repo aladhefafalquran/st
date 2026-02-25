@@ -16,6 +16,9 @@
     "node": ">=20"
   },
   "pnpm": {
-    "neverBuiltDependencies": ["node-datachannel"]
+    "neverBuiltDependencies": ["node-datachannel"],
+    "overrides": {
+      "node-datachannel": "npm:empty-npm-package@1.0.2"
+    }
   }
 }
