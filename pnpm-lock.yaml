@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  node-datachannel: npm:empty-npm-package@1.0.0
+  node-datachannel: link:packages/node-dc-stub
 
 importers:
 
@@ -133,6 +133,8 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+
+  packages/node-dc-stub: {}
 
   packages/shared: {}
 
@@ -1397,9 +1399,6 @@ packages:
   empathic@2.0.0:
     resolution: {integrity: sha512-i6UzDscO/XfAcNYD75CfICkmfLedpyPDdozrLMmQc5ORaQcdMoc21OnlEylMIqI7U8eniKrPMxxtj8k0vhmJhA==}
     engines: {node: '>=14'}
-
-  empty-npm-package@1.0.0:
-    resolution: {integrity: sha512-q4Mq/+XO7UNDdMiPpR/LIBIW1Zl4V0Z6UT9aKGqIAnBCtCb3lvZJM1KbDbdzdC8fKflwflModfjR29Nt0EpcwA==}
 
   encodeurl@2.0.0:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
@@ -3573,8 +3572,6 @@ snapshots:
 
   empathic@2.0.0: {}
 
-  empty-npm-package@1.0.0: {}
-
   encodeurl@2.0.0: {}
 
   end-of-stream@1.4.5:
@@ -4700,7 +4697,7 @@ snapshots:
 
   webrtc-polyfill@1.2.0:
     dependencies:
-      node-datachannel: empty-npm-package@1.0.0
+      node-datachannel: link:packages/node-dc-stub
 
   webtorrent@2.8.5(bare-url@2.3.2):
     dependencies:
