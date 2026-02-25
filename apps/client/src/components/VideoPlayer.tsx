@@ -293,14 +293,14 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   // ----- Auto-skip if video is mounted but never starts playing (e.g. unsupported codec) -----
   useEffect(() => {
     if (!streamUrl || videoCanPlay) return
+    // 6s is plenty — if the buffer is full and video still isn't playing, codec/format is wrong
     const t = setTimeout(() => {
-      // Still not playing after 12s — try next source
       setStreamIndex((prev) => {
         const next = prev + 1
         setStreams((s) => { startStream(s, next); return s })
         return next
       })
-    }, 12000)
+    }, 6000)
     return () => clearTimeout(t)
   }, [streamUrl, videoCanPlay])
 
@@ -476,7 +476,9 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
             onError={() => {
               const count = videoErrorCount + 1
               setVideoErrorCount(count)
-              if (count >= 2) {
+              // If preload is already 100% and it still errors = bad codec/format, skip immediately.
+              // Otherwise retry once (transient network hiccup), then skip on second error.
+              if (count >= 2 || preloadPct >= 100) {
                 tryNextStream()
               } else {
                 const v = videoRef.current
