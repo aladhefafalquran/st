@@ -53,14 +53,20 @@ async function getToken(): Promise<string> {
   return sessionToken
 }
 
+// Parse each <member>...</member> block and extract the string value for a named field.
+// More robust than a single-pass regex — handles arbitrary whitespace between XML tags.
 function extractField(xml: string, field: string): string[] {
-  const re = new RegExp(
-    `<name>${field}<\\/name>\\s*<value>(?:<string>)?([^<]*)(?:<\\/string>)?<\\/value>`, 'g'
-  )
-  const out: string[] = []
+  const results: string[] = []
+  const memberRe = /<member>([\s\S]*?)<\/member>/g
   let m: RegExpExecArray | null
-  while ((m = re.exec(xml)) !== null) out.push(m[1].trim())
-  return out
+  while ((m = memberRe.exec(xml)) !== null) {
+    const block = m[0]
+    if (block.includes(`<name>${field}</name>`)) {
+      const val = block.match(/<string>([^<]*)<\/string>/)
+      if (val?.[1] !== undefined) results.push(val[1].trim())
+    }
+  }
+  return results
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -75,12 +81,14 @@ router.get('/search', async (req, res) => {
   try {
     const tok = await getToken()
     const lang3 = LANG_MAP[languages] ?? 'eng'
-    const pureId = imdb_id.replace(/^tt/, '')
+    const pureId = imdb_id.replace(/^tt/, '').padStart(7, '0')
 
-    let struct = `<member><name>sublanguageid</name><value><string>${lang3}</string></value></member>`
+    // Search with 'all' languages — casting a wide net avoids empty results
+    // when the narrow language filter returns nothing. We filter afterward.
+    let struct = `<member><name>sublanguageid</name><value><string>all</string></value></member>`
       + `<member><name>imdbid</name><value><string>${pureId}</string></value></member>`
-    if (type === 'tv' && season)  struct += `<member><name>season</name><value><string>${season}</string></value></member>`
-    if (type === 'tv' && episode) struct += `<member><name>episode</name><value><string>${episode}</string></value></member>`
+    if (type === 'tv' && season)  struct += `<member><name>season</name><value><int>${season}</int></value></member>`
+    if (type === 'tv' && episode) struct += `<member><name>episode</name><value><int>${episode}</int></value></member>`
 
     const params =
       `<param><value><string>${tok}</string></value></param>` +
@@ -88,17 +96,28 @@ router.get('/search', async (req, res) => {
 
     const resp = await xmlCall('SearchSubtitles', params)
 
+    if (resp.includes('No results found') || !resp.includes('IDSubtitleFile')) {
+      console.log('[subtitles/search] No results from XML-RPC for', pureId, lang3)
+      res.json([])
+      return
+    }
+
     const ids   = extractField(resp, 'IDSubtitleFile')
     const names = extractField(resp, 'MovieReleaseName')
     const langs = extractField(resp, 'SubLanguageID')
 
-    const results: SubtitleTrack[] = ids.slice(0, 20).map((fileId, i) => ({
-      fileId,
+    // Filter to the requested language; fall back to all if none match
+    const matchIdx = ids.map((_, i) => langs[i]?.toLowerCase() === lang3.toLowerCase() ? i : -1).filter(i => i >= 0)
+    const finalIdx = matchIdx.length > 0 ? matchIdx : ids.map((_, i) => i)
+
+    const results: SubtitleTrack[] = finalIdx.slice(0, 20).map(i => ({
+      fileId: ids[i],
       language: langs[i] ?? lang3,
       languageName: languages ?? lang3,
-      releaseName: names[i] ?? fileId,
+      releaseName: names[i] ?? ids[i],
     }))
 
+    console.log(`[subtitles/search] ${ids.length} total, ${matchIdx.length} in ${lang3}, returning ${results.length}`)
     res.json(results)
   } catch (err: any) {
     console.error('[subtitles/search]', err?.message)

@@ -4,11 +4,10 @@ import { useAuthStore } from '../store/authStore'
 import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shared'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
-// Max seconds before auto-advancing to next source
-const PRELOAD_TIMEOUT = 30
-// If speed stays below this (bytes/s) for SLOW_TIMEOUT seconds, skip source
-const SLOW_SPEED_THRESHOLD = 200 * 1024  // 200 KB/s
-const SLOW_TIMEOUT = 20                  // seconds
+const PRELOAD_TIMEOUT    = 30           // absolute max wait (seconds)
+const NO_PEERS_TIMEOUT   = 10           // skip if zero peers after this long
+const SLOW_SPEED_TIMEOUT = 15           // skip if peers>0 but speed too low
+const SLOW_SPEED_THRESHOLD = 200 * 1024 // 200 KB/s
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -190,9 +189,9 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       const speed = downloadSpeedRef.current
       const p = peersRef.current
 
-      // Skip if: hard timeout OR (has peers but speed too low for too long)
-      const slowAndStuck = t >= SLOW_TIMEOUT && p > 0 && speed < SLOW_SPEED_THRESHOLD
-      if (t >= PRELOAD_TIMEOUT || slowAndStuck) {
+      const noPeers     = t >= NO_PEERS_TIMEOUT   && p === 0
+      const slowAndStuck = t >= SLOW_SPEED_TIMEOUT && p > 0 && speed < SLOW_SPEED_THRESHOLD
+      if (t >= PRELOAD_TIMEOUT || noPeers || slowAndStuck) {
         clearInterval(iv)
         setStreamIndex((prev) => {
           const next = prev + 1
