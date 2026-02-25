@@ -17,6 +17,10 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
     return Response.json([], { status: 200 })
   }
 
+  if (!env.OPENSUBTITLES_API_KEY) {
+    return Response.json({ error: 'OPENSUBTITLES_API_KEY not configured' }, { status: 503 })
+  }
+
   const headers = {
     'Api-Key': env.OPENSUBTITLES_API_KEY,
     'Content-Type': 'application/json',
@@ -36,7 +40,10 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
 
   try {
     const resp = await fetch(`https://api.opensubtitles.com/api/v1/subtitles?${params}`, { headers })
-    if (!resp.ok) return Response.json([])
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '')
+      return Response.json({ error: `OpenSubtitles ${resp.status}: ${text.slice(0, 200)}` }, { status: 502 })
+    }
 
     const data: any = await resp.json()
     const results = (data.data ?? [])
@@ -49,7 +56,7 @@ export const onRequestGet = async ({ request, env }: { request: Request; env: En
       }))
 
     return Response.json(results)
-  } catch {
-    return Response.json([])
+  } catch (err: any) {
+    return Response.json({ error: err?.message ?? 'Unknown error' }, { status: 502 })
   }
 }
