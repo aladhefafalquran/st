@@ -4,7 +4,7 @@ RUN npm install -g pnpm
 WORKDIR /app
 
 FROM base AS builder
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/server/package.json ./apps/server/
 
@@ -27,7 +27,6 @@ COPY --from=builder /app/apps/server/node_modules ./node_modules
 COPY --from=builder /app/apps/server/prisma ./prisma
 
 ENV NODE_ENV=production
-ENV PORT=7860
-EXPOSE 7860
+EXPOSE 3001
 
 CMD ["node", "dist/index.js"]
