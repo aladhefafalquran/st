@@ -337,11 +337,12 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setSubLang(lang); setSubtitleLoading(true)
     setTracks([]); setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null)
     try {
-      const params: Record<string, string | number> = { imdb_id: imdbId, type: mediaType, languages: lang }
-      if (mediaType === 'tv' && season) params.season = season
-      if (mediaType === 'tv' && episode) params.episode = episode
-      const r = await api.get('/api/subtitles/search', { params })
-      const list: SubtitleTrack[] = r.data
+      // Relative URL → CF Pages Function in prod, Vite proxy → local server in dev
+      const params = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
+      if (mediaType === 'tv' && season)  params.set('season',  String(season))
+      if (mediaType === 'tv' && episode) params.set('episode', String(episode))
+      const r = await fetch(`/api/subtitles/search?${params}`)
+      const list: SubtitleTrack[] = await r.json()
       setTracks(list)
     } catch {
       setTracks([])
@@ -353,18 +354,17 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setActiveTrack(track)
     setSubtitleError(null)
     try {
-      // Server uses OpenSubtitles XML-RPC (legacy) which works from datacenter IPs
-      const r = await api.get(`/api/subtitles/download/${track.fileId}`, { responseType: 'text' })
-      setCues(parseVtt(r.data as string))
-    } catch (err: any) {
-      let msg = 'Download failed'
-      const raw = err?.response?.data
-      if (typeof raw === 'string') {
-        try { msg = JSON.parse(raw)?.error ?? msg } catch { msg = raw.slice(0, 120) }
-      } else if (raw?.error) {
-        msg = raw.error
+      // Relative URL → CF Pages Function in prod, Vite proxy → local server in dev
+      const r = await fetch(`/api/subtitles/download/${track.fileId}`)
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({})) as any
+        throw new Error(err?.error ?? `HTTP ${r.status}`)
       }
-      console.error('[subtitle]', err?.response?.status, msg)
+      const text = await r.text()
+      setCues(parseVtt(text))
+    } catch (err: any) {
+      const msg = err?.message ?? 'Download failed'
+      console.error('[subtitle]', msg)
       setSubtitleError(msg)
       setCues([])
     }
