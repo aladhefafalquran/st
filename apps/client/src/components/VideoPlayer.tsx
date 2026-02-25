@@ -4,11 +4,6 @@ import type { TorrentOption, SubtitleTrack, SubtitleCue } from '@streamtime/shar
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) ?? ''
 
-const PRELOAD_TIMEOUT      = 30
-const NO_PEERS_TIMEOUT     = 10
-const SLOW_SPEED_TIMEOUT   = 15
-const SLOW_SPEED_THRESHOLD = 200 * 1024  // 200 KB/s
-
 const QUALITY_ORDER: Record<string, number> = { '2160p': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 }
 
 const QUALITY_BADGE: Record<string, string> = {
@@ -96,7 +91,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
   const [preloadBytes, setPreloadBytes] = useState(0)
   const [preloadTotal, setPreloadTotal] = useState(5 * 1024 * 1024)
   const [streamError, setStreamError]   = useState<string | null>(null)
-  const waitRef    = useRef(0)
   const peersRef   = useRef(0)
   const speedRef   = useRef(0)
 
@@ -131,7 +125,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setStreamUrl(null); streamUrlRef.current = null
     setStreamPhase('waiting')
     setStreamError(null)
-    waitRef.current = 0
     setVideoCanPlay(false); setErrCount(0)
     setQualityFilter('all')
 
@@ -165,7 +158,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     setStreamPhase('waiting')
     setPeers(0); setDownloadSpeed(0); setPreloadBytes(0)
     setStreamError(null)
-    waitRef.current = 0
     setVideoCanPlay(false); setErrCount(0)
     peersRef.current = 0; speedRef.current = 0
     // Prewarm this + next 2
@@ -174,25 +166,6 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       api.post('/api/stream/prewarm', { magnet: s.magnet, fileIdx: s.fileIdx }).catch(() => {})
     }
   }
-
-  // ── Timeout auto-skip ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (streamUrl || streamError || streamsLoading) return
-    waitRef.current = 0
-    const iv = setInterval(() => {
-      waitRef.current++
-      const t = waitRef.current, p = peersRef.current, sp = speedRef.current
-      const skip = t >= PRELOAD_TIMEOUT
-        || (t >= NO_PEERS_TIMEOUT && p === 0)
-        || (t >= SLOW_SPEED_TIMEOUT && p > 0 && sp < SLOW_SPEED_THRESHOLD)
-      if (skip) {
-        clearInterval(iv)
-        const next = activeIdxRef.current + 1
-        setStreams(s => { doStartStream(s, next); return s })
-      }
-    }, 1000)
-    return () => clearInterval(iv)
-  }, [activeStreamRef.current, streamUrl, streamError, streamsLoading])
 
   // ── Poll status (1s) ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -293,7 +266,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
       const p = new URLSearchParams({ imdb_id: imdbId, type: mediaType, languages: lang })
       if (mediaType === 'tv' && season)  p.set('season',  String(season))
       if (mediaType === 'tv' && episode) p.set('episode', String(episode))
-      const r = await fetch(`/api/subtitles/search?${p}`)
+      const r = await fetch(`${API_BASE}/api/subtitles/search?${p}`)
       const body = await r.json().catch(() => [])
       if (!r.ok) throw new Error((body as any)?.error ?? `Search ${r.status}`)
       setTracks(body as SubtitleTrack[])
@@ -306,7 +279,7 @@ export function VideoPlayer({ tmdbId, mediaType, title, imdbId, season, episode,
     if (!t) { setActiveTrack(null); setCues([]); setActiveCue(null); setSubtitleError(null); return }
     setActiveTrack(t); setSubtitleError(null)
     try {
-      const r = await fetch(`/api/subtitles/download/${t.fileId}`)
+      const r = await fetch(`${API_BASE}/api/subtitles/download/${t.fileId}`)
       if (!r.ok) { const e = await r.json().catch(() => ({})) as any; throw new Error(e?.error ?? `HTTP ${r.status}`) }
       setCues(parseVtt(await r.text()))
       setSubsOpen(false)
