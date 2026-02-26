@@ -6,7 +6,7 @@ const router: Router = Router()
 
 const tmdb = axios.create({
   baseURL: 'https://api.themoviedb.org/3',
-  params: { api_key: env.TMDB_API_KEY },
+  headers: { Authorization: `Bearer ${env.TMDB_API_KEY}` },
 })
 
 async function proxyGet(path: string, params?: Record<string, string>) {
