@@ -1,7 +1,12 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
+import { neonConfig, Pool } from '@neondatabase/serverless'
+import ws from 'ws'
 
-// Prisma 6.x: PrismaNeon takes { connectionString } directly (not a Pool)
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! })
+// ws needed on Node.js; globalThis.WebSocket in Node 21+ is not fully compatible with neon
+neonConfig.webSocketConstructor = ws
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const adapter = new PrismaNeon(pool)
 
 export const prisma = new PrismaClient({ adapter })
