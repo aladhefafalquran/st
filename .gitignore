@@ -10,6 +10,7 @@ build
 
 # Prisma
 apps/server/prisma/migrations
+apps/server/src/generated
 
 # Vite
 apps/client/dist

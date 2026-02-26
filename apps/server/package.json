@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "@prisma/adapter-neon": "^6.1.0",
-    "@prisma/client": "^6.1.0",
+    "@prisma/adapter-neon": "^7.0.0",
+    "@prisma/client": "^7.0.0",
     "@streamtime/shared": "workspace:*",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
@@ -22,7 +22,6 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "webtorrent": "^2.5.1",
-    "ws": "^8.18.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -33,7 +32,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.7",
     "esbuild": "^0.24.2",
-    "prisma": "^6.1.0",
+    "prisma": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }
