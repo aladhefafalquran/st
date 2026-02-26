@@ -153,7 +153,7 @@ export async function getTorrentioStreams(
   }
 
   return all.sort((a, b) => {
-    const qDiff = (QUALITY_ORDER[b.quality] ?? 0) - (QUALITY_ORDER[a.quality] ?? 0)
+    const qDiff = (QUALITY_BONUS[b.quality] ?? 0) - (QUALITY_BONUS[a.quality] ?? 0)
     return qDiff !== 0 ? qDiff : b.seeds - a.seeds
   })
 }
