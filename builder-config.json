@@ -1,0 +1,16 @@
+{
+  "appId": "com.streamtime.desktop",
+  "productName": "StreamTime",
+  "directories": {
+    "output": "dist"
+  },
+  "win": {
+    "target": "nsis"
+  },
+  "mac": {
+    "target": "dmg"
+  },
+  "linux": {
+    "target": "AppImage"
+  }
+}

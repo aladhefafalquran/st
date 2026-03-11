@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamTime</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <h1>StreamTime</h1>
+      <nav class="nav-links">
+        <a href="#" id="navHome" class="active">الرئيسية</a>
+        <a href="#" id="navMovies">أفلام</a>
+        <a href="#" id="navTV">مسلسلات</a>
+        <a href="#" id="navTags">تصنيفات</a>
+      </nav>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="ابحث عن فيلم أو مسلسل...">
+        <button id="searchBtn">بحث</button>
+      </div>
+    </header>
+    
+    <main id="mainContent">
+      <div id="homeSections">
+        <section id="genreSection" class="hidden">
+          <h2>التصنيفات</h2>
+          <div id="genreList" class="tags-grid"></div>
+        </section>
+        <section>
+          <h2>أفلام رائجة</h2>
+          <div id="trendingMovies" class="movies-grid"></div>
+        </section>
+        <section>
+          <h2>مسلسلات رائجة</h2>
+          <div id="trendingTV" class="movies-grid"></div>
+        </section>
+      </div>
+
+      <div id="searchResults" class="hidden">
+        <button id="backToHome">العودة للرئيسية</button>
+        <h2>نتائج البحث</h2>
+        <div id="moviesGrid" class="movies-grid"></div>
+        <div class="load-more-container">
+          <button id="loadMoreBtn" class="hidden">تحميل المزيد</button>
+        </div>
+      </div>
+      
+      <div id="playerContainer" class="hidden">
+        <div class="player-controls-top">
+          <div class="left-controls">
+            <button id="closePlayerBtn">إغلاق المشغل</button>
+            <button id="fullscreenBtn">ملء الشاشة</button>
+          </div>
+          <h2 id="nowPlayingTitle"></h2>
+        </div>
+        <!-- IFrame for VidSrc -->
+        <iframe id="videoFrame" src="" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe>
+        
+        <!-- Quick Selector under player -->
+        <div id="playerEpisodeSelector" class="hidden">
+          <div class="selector-header">
+            <h3>الحلقات</h3>
+            <select id="playerSeasonSelect"></select>
+          </div>
+          <div id="playerEpisodesGrid" class="episodes-grid-detailed"></div>
+        </div>
+
+        <!-- Recommendations under player -->
+        <div id="playerRecommendations" class="hidden">
+          <div class="selector-header">
+            <h3>مقترحات مشابهة</h3>
+          </div>
+          <div id="recommendationsGrid" class="movies-grid"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Details Modal -->
+    <div id="detailsModal" class="modal hidden">
+      <div class="modal-content details-content">
+        <span id="closeDetails" class="close">&times;</span>
+        <div class="details-header">
+          <img id="detailsPoster" src="" alt="">
+          <div class="details-info">
+            <h1 id="detailsTitle"></h1>
+            <p id="detailsOverview"></p>
+            <div id="detailsMeta" class="meta-tags"></div>
+          </div>
+        </div>
+        
+        <div id="tvSelector" class="hidden">
+          <div class="selector-group">
+            <label>الموسم:</label>
+            <select id="seasonSelect"></select>
+          </div>
+          <div class="episodes-container">
+            <h3>الحلقات</h3>
+            <div id="episodesGrid" class="episodes-grid"></div>
+          </div>
+        </div>
+
+        <div id="movieActions" class="hidden">
+          <button id="playMovieBtn" class="primary-btn">شاهد الآن</button>
+        </div>
+
+        <!-- Recommendations in Details Modal -->
+        <div id="detailsRecommendations" class="hidden">
+          <div class="selector-header">
+            <h3>مقترحات مشابهة</h3>
+          </div>
+          <div id="detailsRecommendationsGrid" class="movies-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <button id="scrollTopBtn" title="Go to top">↑</button>
+  <script src="app.js"></script>
+</body>
+</html>

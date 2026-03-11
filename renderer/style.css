@@ -1,0 +1,595 @@
+:root {
+  --bg-color: #0d1117;
+  --text-color: #c9d1d9;
+  --accent-color: #238636;
+  --accent-hover: #2ea043;
+  --card-bg: #161b22;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+header {
+  padding: 15px 30px;
+  background-color: var(--card-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #30363d;
+}
+
+#scrollTopBtn {
+  position: fixed;
+  bottom: 30px;
+  left: 30px;
+  width: 50px;
+  height: 50px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  transition: all 0.3s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#scrollTopBtn.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.server-dropdown {
+  background: var(--card-bg);
+  color: white;
+  border: 1px solid #30363d;
+  padding: 8px;
+  border-radius: 4px;
+  margin-left: 10px;
+  cursor: pointer;
+}
+
+.server-dropdown:hover {
+  border-color: var(--accent-color);
+}
+
+.nav-links {
+  display: flex;
+  gap: 20px;
+}
+
+.nav-links a {
+  color: var(--text-color);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.nav-links a:hover {
+  background-color: #30363d;
+}
+
+.tags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.tag-item {
+  background: var(--card-bg);
+  border: 1px solid #30363d;
+  color: var(--text-color);
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.tag-item:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+.tag-item.active {
+  background: var(--accent-color);
+  border-color: var(--accent-hover);
+}
+
+.search-bar input {
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #30363d;
+  background: var(--bg-color);
+  color: var(--text-color);
+  width: 300px;
+}
+
+.search-bar button {
+  padding: 10px 20px;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.search-bar button:hover {
+  background-color: var(--accent-hover);
+}
+
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+section h2 {
+  border-right: 4px solid var(--accent-color);
+  padding-right: 15px;
+  margin-bottom: 20px;
+}
+
+#backToHome {
+  padding: 8px 16px;
+  background: #30363d;
+  color: white;
+  border: 1px solid #586069;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+#backToHome:hover {
+  background: #484f58;
+}
+
+.movies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+.movie-card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+  border: 1px solid #30363d;
+}
+
+.movie-card:hover {
+  transform: scale(1.05);
+}
+
+.movie-card img {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+}
+
+.movie-card h3 {
+  padding: 10px;
+  margin: 0;
+  font-size: 16px;
+  text-align: center;
+}
+
+#playerContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  padding: 20px;
+}
+
+#videoFrame {
+  width: 100%;
+  height: 600px;
+  border: none;
+  background: #000;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  transition: all 0.3s ease;
+}
+
+/* Cinema Mode / Fake Fullscreen */
+.cinema-mode #videoFrame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+}
+
+.cinema-mode .player-controls-top {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  width: auto;
+  background: rgba(0,0,0,0.6);
+  padding: 10px;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.cinema-mode .player-controls-top:hover {
+  opacity: 1;
+}
+
+#fullscreenBtn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.stats {
+  margin-top: 10px;
+  font-family: monospace;
+  color: var(--accent-color);
+}
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content.details-content {
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.details-header {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+#detailsPoster {
+  width: 250px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.details-info h1 {
+  margin-top: 0;
+  color: #fff;
+}
+
+.details-info p {
+  line-height: 1.6;
+  color: #8b949e;
+}
+
+.meta-tags {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.meta-tags span {
+  background: #30363d;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.selector-group {
+  margin: 20px 0;
+}
+
+.selector-group select {
+  padding: 8px;
+  background: var(--bg-color);
+  color: white;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+}
+
+.episodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.episode-card {
+  background: var(--card-bg);
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.episode-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--accent-color);
+}
+
+.episode-card.active {
+  border: 2px solid var(--accent-color);
+  box-shadow: 0 0 15px rgba(35, 134, 54, 0.4);
+}
+
+.episode-thumbnail {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  background: #000;
+}
+
+.episode-info {
+  padding: 10px;
+}
+
+.episode-number {
+  font-size: 12px;
+  color: var(--accent-color);
+  font-weight: bold;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.episode-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+#playerEpisodeSelector {
+  width: 100%;
+  max-width: 1200px;
+  margin-top: 30px;
+  padding: 20px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid #30363d;
+}
+
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.episodes-grid-detailed {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+/* Custom Scrollbar for horizontal episodes */
+.episodes-grid-detailed::-webkit-scrollbar {
+  height: 8px;
+}
+.episodes-grid-detailed::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+.episodes-grid-detailed::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 10px;
+}
+
+.episodes-grid-detailed .episode-card {
+  min-width: 220px;
+  flex-shrink: 0;
+}
+
+.now-watching-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--accent-color);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.primary-btn {
+  background: var(--accent-color);
+  color: white;
+  padding: 12px 30px;
+  border: none;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.primary-btn:hover {
+  background: var(--accent-hover);
+}
+
+.player-controls-top {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+#playerRecommendations, #playerEpisodeSelector, #detailsRecommendations {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.movies-grid-horizontal {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 10px 0 20px 0;
+}
+
+.movies-grid-horizontal::-webkit-scrollbar {
+  height: 8px;
+}
+.movies-grid-horizontal::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+.movies-grid-horizontal::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 10px;
+}
+
+.movies-grid-horizontal .movie-card {
+  min-width: 160px;
+  max-width: 160px;
+  flex-shrink: 0;
+}
+
+.movies-grid-horizontal .movie-card img {
+  height: 240px;
+}
+
+.close {
+  float: left;
+  cursor: pointer;
+  font-size: 24px;
+}
+
+#qualityModal .modal-content {
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#streamsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.stream-item {
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stream-item:hover {
+  border-color: var(--accent-color);
+  background: #22272e;
+  transform: translateX(-5px);
+}
+
+.stream-main-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stream-name {
+  font-weight: bold;
+  font-size: 16px;
+  color: #adbac7;
+}
+
+.stream-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-quality { background: #238636; color: white; }
+.badge-seeds { background: #1f6feb; color: white; }
+.badge-size { background: #6e7681; color: white; }
+.badge-provider { border: 1px solid #444c56; color: #768390; }
+
+.stream-details-text {
+  font-size: 13px;
+  color: #768390;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+#loadMoreBtn {
+  padding: 12px 40px;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#loadMoreBtn:hover {
+  background-color: #30363d;
+  border-color: var(--accent-color);
+}

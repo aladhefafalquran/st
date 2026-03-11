@@ -1,0 +1,19 @@
+{
+  "name": "streamtime",
+  "version": "1.0.0",
+  "description": "Desktop Streaming Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@cliqz/adblocker-electron": "^1.26.11",
+    "cross-fetch": "^4.0.0"
+  },
+  "devDependencies": {
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  }
+}
